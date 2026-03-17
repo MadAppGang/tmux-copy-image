@@ -45,6 +45,7 @@ an SSH RemoteForward tunnel.`,
 
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newSetupCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInstallCmd())
 	root.AddCommand(newUninstallCmd())
@@ -58,6 +59,84 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print version and exit",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("rpaster %s (commit %s, built %s)\n", version, commit, date)
+		},
+	}
+}
+
+func newSetupCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "setup",
+		Short: "Show quickstart setup instructions",
+		Long:  "Print step-by-step setup instructions for rpaster.",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Print(`
+┌─────────────────────────────────────────────────────┐
+│  rpaster — clipboard image paste over SSH           │
+└─────────────────────────────────────────────────────┘
+
+  Paste images from your LOCAL clipboard into a remote
+  tmux session (Claude Code, vim, any terminal app).
+
+  LOCAL MACHINE            SSH tunnel          REMOTE MACHINE
+  ┌──────────┐     RemoteForward 18339     ┌──────────────┐
+  │ clipboard │ ◄──────────────────────── │ tmux plugin  │
+  │ rpaster   │          tunnel            │ prefix + V   │
+  └──────────┘                             └──────────────┘
+
+━━━ INSTALL ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Option A — Homebrew (macOS/Linux):
+
+    brew install MadAppGang/tap/rpaster
+    brew services start rpaster
+
+  Option B — Go install:
+
+    go install github.com/MadAppGang/tmux-copy-image/cmd/rpaster@latest
+    rpaster install
+
+  Option C — curl installer:
+
+    curl -sSL https://raw.githubusercontent.com/MadAppGang/tmux-copy-image/main/install.sh | bash
+
+━━━ CONFIGURE SSH ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Add to ~/.ssh/config on your LOCAL machine:
+
+    Host your-remote-host
+        RemoteForward 127.0.0.1:18339 127.0.0.1:18339
+
+  Or use the installer (does it automatically):
+
+    rpaster install --remote your-remote-host
+
+━━━ INSTALL TMUX PLUGIN ON REMOTE ━━━━━━━━━━━━━━━━━━━
+
+  Option A — Automatic:
+
+    rpaster install --remote your-remote-host
+
+  Option B — Manual:
+
+    ssh your-remote-host
+    git clone https://github.com/MadAppGang/tmux-copy-image ~/.tmux/plugins/tmux-clip-image
+    echo 'run-shell ~/.tmux/plugins/tmux-clip-image/tmux-clip-image.tmux' >> ~/.tmux.conf
+    tmux source-file ~/.tmux.conf
+
+━━━ USE IT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Copy an image on your local machine (Cmd+C, screenshot, etc.)
+  2. SSH to your remote:  ssh your-remote-host
+  3. In tmux, press:      prefix + V
+  4. The image file path appears in your pane
+
+━━━ VERIFY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  rpaster doctor                          # check local setup
+  rpaster doctor --remote your-remote     # check full pipeline
+
+  More info: https://github.com/MadAppGang/tmux-copy-image
+`)
 		},
 	}
 }
