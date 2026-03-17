@@ -28,10 +28,29 @@ var (
 )
 
 func main() {
+	showSetupHint()
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+// showSetupHint prints a one-liner on first-ever invocation of any subcommand.
+// Once shown, it creates a marker file so it never appears again.
+func showSetupHint() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	marker := filepath.Join(home, ".config", "rpaster", ".setup-shown")
+	if _, err := os.Stat(marker); err == nil {
+		return // already shown
+	}
+	fmt.Fprintln(os.Stderr, "\033[1mTip:\033[0m first time? Run \033[1mrpaster setup\033[0m for quickstart instructions.")
+	fmt.Fprintln(os.Stderr, "")
+	// Create marker so we don't show again.
+	_ = os.MkdirAll(filepath.Dir(marker), 0700)
+	_ = os.WriteFile(marker, []byte("shown\n"), 0600)
 }
 
 func newRootCmd() *cobra.Command {
@@ -40,7 +59,10 @@ func newRootCmd() *cobra.Command {
 		Short: "Clipboard image HTTP daemon for tmux remote paste",
 		Long: `rpaster serves local clipboard images over a loopback HTTP server
 so that tmux sessions on remote machines can fetch and paste them via
-an SSH RemoteForward tunnel.`,
+an SSH RemoteForward tunnel.
+
+Quickstart:  rpaster setup
+Diagnostics: rpaster doctor`,
 	}
 
 	root.AddCommand(newServeCmd())
