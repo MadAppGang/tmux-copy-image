@@ -4,6 +4,7 @@ project_name: rpaster
 
 before:
   hooks:
+    - cp -r plugin/ internal/embedded/plugin/
     - go mod tidy
 
 builds:
