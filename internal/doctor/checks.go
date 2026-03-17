@@ -13,10 +13,10 @@ import (
 	"time"
 )
 
-// binaryCheck verifies that the clip-serve binary exists and is executable.
+// binaryCheck verifies that the rpaster binary exists and is executable.
 type binaryCheck struct{}
 
-func (c *binaryCheck) Name() string { return "clip-serve binary" }
+func (c *binaryCheck) Name() string { return "rpaster binary" }
 
 func (c *binaryCheck) Run(_ context.Context) Result {
 	// Check if the current executable is accessible.
@@ -24,8 +24,8 @@ func (c *binaryCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return Result{
 			Status:      StatusFail,
-			Description: "clip-serve binary: cannot determine executable path",
-			Remediation: "Run clip-serve install to install the binary to ~/.local/bin/clip-serve",
+			Description: "rpaster binary: cannot determine executable path",
+			Remediation: "Run rpaster install to install the binary to ~/.local/bin/rpaster",
 		}
 	}
 
@@ -39,8 +39,8 @@ func (c *binaryCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return Result{
 			Status:      StatusFail,
-			Description: fmt.Sprintf("clip-serve binary not found at %s", real),
-			Remediation: "Run clip-serve install to install the binary",
+			Description: fmt.Sprintf("rpaster binary not found at %s", real),
+			Remediation: "Run rpaster install to install the binary",
 		}
 	}
 
@@ -49,14 +49,14 @@ func (c *binaryCheck) Run(_ context.Context) Result {
 	if mode&0111 == 0 {
 		return Result{
 			Status:      StatusFail,
-			Description: fmt.Sprintf("clip-serve binary at %s is not executable", real),
+			Description: fmt.Sprintf("rpaster binary at %s is not executable", real),
 			Remediation: fmt.Sprintf("Run: chmod +x %s", real),
 		}
 	}
 
 	return Result{
 		Status:      StatusPass,
-		Description: fmt.Sprintf("clip-serve binary found at %s", real),
+		Description: fmt.Sprintf("rpaster binary found at %s", real),
 	}
 }
 
@@ -139,7 +139,7 @@ type daemonCheck struct {
 	Port int
 }
 
-func (c *daemonCheck) Name() string { return "clip-serve daemon" }
+func (c *daemonCheck) Name() string { return "rpaster daemon" }
 
 func (c *daemonCheck) Run(ctx context.Context) Result {
 	url := fmt.Sprintf("http://127.0.0.1:%d/health", c.Port)
@@ -151,7 +151,7 @@ func (c *daemonCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return Result{
 			Status:      StatusFail,
-			Description: "clip-serve daemon: failed to construct health request",
+			Description: "rpaster daemon: failed to construct health request",
 			Remediation: "This is an internal error; please report it",
 		}
 	}
@@ -161,8 +161,8 @@ func (c *daemonCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return Result{
 			Status:      StatusFail,
-			Description: fmt.Sprintf("clip-serve daemon: not running or unreachable on port %d", c.Port),
-			Remediation: "Run: clip-serve serve  (or: clip-serve install to set up autostart)",
+			Description: fmt.Sprintf("rpaster daemon: not running or unreachable on port %d", c.Port),
+			Remediation: "Run: rpaster serve  (or: rpaster install to set up autostart)",
 		}
 	}
 	defer resp.Body.Close()
@@ -170,8 +170,8 @@ func (c *daemonCheck) Run(ctx context.Context) Result {
 	if resp.StatusCode != http.StatusOK {
 		return Result{
 			Status:      StatusWarn,
-			Description: fmt.Sprintf("clip-serve daemon: /health returned HTTP %d", resp.StatusCode),
-			Remediation: "Restart clip-serve: launchctl kickstart -k gui/$(id -u)/com.clip-serve",
+			Description: fmt.Sprintf("rpaster daemon: /health returned HTTP %d", resp.StatusCode),
+			Remediation: "Restart rpaster: launchctl kickstart -k gui/$(id -u)/com.rpaster",
 		}
 	}
 
@@ -183,14 +183,14 @@ func (c *daemonCheck) Run(ctx context.Context) Result {
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		return Result{
 			Status:      StatusWarn,
-			Description: "clip-serve daemon: running but could not parse /health response",
+			Description: "rpaster daemon: running but could not parse /health response",
 		}
 	}
 
 	uptime := time.Duration(health.UptimeSeconds) * time.Second
 	return Result{
 		Status:      StatusPass,
-		Description: fmt.Sprintf("clip-serve daemon is running (backend: %s, uptime: %s)", health.Backend, fmtDuration(uptime)),
+		Description: fmt.Sprintf("rpaster daemon is running (backend: %s, uptime: %s)", health.Backend, fmtDuration(uptime)),
 	}
 }
 
@@ -233,12 +233,12 @@ func (c *serviceCheck) checkLaunchd() Result {
 			Description: "service unit: cannot determine home directory",
 		}
 	}
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.clip-serve.plist")
+	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
 	if _, err := os.Stat(plistPath); err != nil {
 		return Result{
 			Status:      StatusWarn,
-			Description: "service unit: launchd plist not found at ~/Library/LaunchAgents/com.clip-serve.plist",
-			Remediation: "Run: clip-serve install  to create the service unit",
+			Description: "service unit: launchd plist not found at ~/Library/LaunchAgents/com.rpaster.plist",
+			Remediation: "Run: rpaster install  to create the service unit",
 		}
 	}
 	return Result{
@@ -255,12 +255,12 @@ func (c *serviceCheck) checkSystemd() Result {
 			Description: "service unit: cannot determine home directory",
 		}
 	}
-	unitPath := filepath.Join(home, ".config", "systemd", "user", "clip-serve.service")
+	unitPath := filepath.Join(home, ".config", "systemd", "user", "rpaster.service")
 	if _, err := os.Stat(unitPath); err != nil {
 		return Result{
 			Status:      StatusWarn,
-			Description: "service unit: systemd user unit not found at ~/.config/systemd/user/clip-serve.service",
-			Remediation: "Run: clip-serve install  to create the service unit",
+			Description: "service unit: systemd user unit not found at ~/.config/systemd/user/rpaster.service",
+			Remediation: "Run: rpaster install  to create the service unit",
 		}
 	}
 	return Result{
@@ -336,7 +336,7 @@ func (c *remotePluginCheck) Run(ctx context.Context) Result {
 		return Result{
 			Status:      StatusFail,
 			Description: fmt.Sprintf("remote plugin: tmux-clip-image.tmux not found at %s on %s", c.PluginDir, c.Host),
-			Remediation: fmt.Sprintf("Run: clip-serve install --remote %s  to push the plugin", c.Host),
+			Remediation: fmt.Sprintf("Run: rpaster install --remote %s  to push the plugin", c.Host),
 		}
 	}
 	return Result{
@@ -360,8 +360,8 @@ func (c *tunnelCheck) Run(ctx context.Context) Result {
 	if err != nil || strings.TrimSpace(string(out)) == "" {
 		return Result{
 			Status:      StatusFail,
-			Description: fmt.Sprintf("SSH tunnel: cannot reach clip-serve on %s via tunnel (port %d)", c.Host, c.Port),
-			Remediation: fmt.Sprintf("Ensure RemoteForward 127.0.0.1:%d 127.0.0.1:%d is in ~/.ssh/config for host %s,\nand that clip-serve is running locally.", c.Port, c.Port, c.Host),
+			Description: fmt.Sprintf("SSH tunnel: cannot reach rpaster on %s via tunnel (port %d)", c.Host, c.Port),
+			Remediation: fmt.Sprintf("Ensure RemoteForward 127.0.0.1:%d 127.0.0.1:%d is in ~/.ssh/config for host %s,\nand that rpaster is running locally.", c.Port, c.Port, c.Host),
 		}
 	}
 	// Check that the response looks like a healthy JSON response.

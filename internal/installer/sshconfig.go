@@ -13,10 +13,10 @@ import (
 const (
 	// markerBegin is the start of a managed block for a given host.
 	// The host name is appended after "BEGIN ".
-	markerBeginFmt = "# --- clip-serve BEGIN %s ---"
+	markerBeginFmt = "# --- rpaster BEGIN %s ---"
 
 	// markerEnd is the end of a managed block for a given host.
-	markerEndFmt = "# --- clip-serve END %s ---"
+	markerEndFmt = "# --- rpaster END %s ---"
 )
 
 // managedBlock returns the RemoteForward stanza for the given host and port,
@@ -38,7 +38,7 @@ func managedBlock(host string, port int) string {
 //   - If an existing un-managed "Host <hostname>" block is found, warn and skip.
 //   - If a managed block for this host already exists, overwrite it in-place.
 //   - Otherwise, append a new managed block.
-//   - A backup is created at <configPath>.clip-serve.bak.<timestamp> before any write.
+//   - A backup is created at <configPath>.rpaster.bak.<timestamp> before any write.
 //   - The write is atomic (temp file + rename).
 func InjectRemoteForward(host string, port int, configPath string) error {
 	existing, err := readSSHConfig(configPath)
@@ -102,14 +102,14 @@ func readSSHConfig(configPath string) (string, error) {
 	return string(data), nil
 }
 
-// backupSSHConfig writes a copy of content to <configPath>.clip-serve.bak.<timestamp>.
+// backupSSHConfig writes a copy of content to <configPath>.rpaster.bak.<timestamp>.
 // If content is empty (file didn't exist) no backup is created.
 func backupSSHConfig(configPath, content string) error {
 	if content == "" {
 		return nil
 	}
 	ts := time.Now().UTC().Format("20060102-150405")
-	bakPath := configPath + ".clip-serve.bak." + ts
+	bakPath := configPath + ".rpaster.bak." + ts
 	if err := os.WriteFile(bakPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("backup ssh config: %w", err)
 	}
@@ -121,7 +121,7 @@ func writeSSHConfig(configPath, content string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0700); err != nil {
 		return fmt.Errorf("create .ssh dir: %w", err)
 	}
-	tmpPath := configPath + ".clip-serve.tmp"
+	tmpPath := configPath + ".rpaster.tmp"
 	if err := os.WriteFile(tmpPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("write ssh config temp: %w", err)
 	}
@@ -133,7 +133,7 @@ func writeSSHConfig(configPath, content string) error {
 }
 
 // hasUnmanagedHost returns true if the config contains "Host <host>" outside
-// of a managed clip-serve block.
+// of a managed rpaster block.
 func hasUnmanagedHost(content, host string) bool {
 	// Build a regex for "Host <host>" lines (case-insensitive for "Host").
 	// An un-managed line is one that is not between managed markers.

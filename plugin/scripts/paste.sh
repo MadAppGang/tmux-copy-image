@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # paste.sh — tmux-clip-image keybinding handler.
 #
-# Fetches a clipboard image from the local clip-serve daemon (via SSH tunnel)
+# Fetches a clipboard image from the local rpaster daemon (via SSH tunnel)
 # and inserts the saved file path into the current tmux pane.
 #
 # Phase 2: multi-format support, Claude Code detection, full error messaging.
@@ -50,7 +50,7 @@ case "${save_dir}" in
 esac
 
 # Token file path (read from file, not from tmux option, to keep it out of ps).
-token_file="${HOME}/.config/clip-serve/token"
+token_file="${HOME}/.config/rpaster/token"
 
 # ---------------------------------------------------------------------------
 # Step 1: Cleanup old clip-* temp files older than 6 hours.
@@ -59,14 +59,14 @@ find "${save_dir}" -maxdepth 1 -name "clip-*" -mmin +360 -delete 2>/dev/null || 
 
 # ---------------------------------------------------------------------------
 # Step 2: Health check — verify daemon is reachable.
-# FR-P-20: "clip-image: cannot reach clip-serve (is SSH tunnel up?)"
+# FR-P-20: "clip-image: cannot reach rpaster (is SSH tunnel up?)"
 # ---------------------------------------------------------------------------
 base_url="http://127.0.0.1:${port}"
 
 if ! curl --silent --max-time "${health_timeout}" --max-redirs 0 \
         --output /dev/null \
         "${base_url}/health" 2>/dev/null; then
-    clip_display_error "cannot reach clip-serve (is SSH tunnel up?)" "${msg_duration}"
+    clip_display_error "cannot reach rpaster (is SSH tunnel up?)" "${msg_duration}"
     exit 1
 fi
 

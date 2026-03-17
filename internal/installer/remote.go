@@ -17,7 +17,7 @@ import (
 //  1. Verify remote tmux version (abort if < 3.0).
 //  2. Create remote plugin directory.
 //  3. Extract embedded plugin files via scp.
-//  4. Write token file to ~/.config/clip-serve/token (mode 0600) if token is set.
+//  4. Write token file to ~/.config/rpaster/token (mode 0600) if token is set.
 //  5. Detect TPM and update remote ~/.tmux.conf with managed markers.
 //  6. Reload tmux config if a session is running.
 func RunRemote(cfg Config) error {
@@ -68,7 +68,7 @@ func UninstallRemote(cfg Config) error {
 
 	// Remove token file if it exists.
 	_, _ = runRemoteCommand(cfg.RemoteHost,
-		"rm -f ~/.config/clip-serve/token")
+		"rm -f ~/.config/rpaster/token")
 
 	// Remove managed TPM block from ~/.tmux.conf.
 	if err := removeTmuxConfBlock(cfg); err != nil {
@@ -162,7 +162,7 @@ func copyPluginFiles(cfg Config) error {
 		}
 
 		// Write to a local temp file.
-		tmp, err := os.CreateTemp("", "clip-serve-plugin-*")
+		tmp, err := os.CreateTemp("", "rpaster-plugin-*")
 		if err != nil {
 			return fmt.Errorf("create temp file: %w", err)
 		}
@@ -199,20 +199,20 @@ func copyPluginFiles(cfg Config) error {
 	})
 }
 
-// writeRemoteToken writes the bearer token to ~/.config/clip-serve/token on
+// writeRemoteToken writes the bearer token to ~/.config/rpaster/token on
 // the remote host with mode 0600. If no token is configured, this is a no-op.
 func writeRemoteToken(cfg Config) error {
 	if cfg.Token == "" {
 		return nil
 	}
 	if cfg.DryRun {
-		fmt.Printf("[dry-run] would write token to ~/.config/clip-serve/token on %s\n", cfg.RemoteHost)
+		fmt.Printf("[dry-run] would write token to ~/.config/rpaster/token on %s\n", cfg.RemoteHost)
 		return nil
 	}
 	_, err := runRemoteCommand(cfg.RemoteHost, strings.Join([]string{
-		"mkdir -p ~/.config/clip-serve &&",
-		fmt.Sprintf("printf '%%s' %s > ~/.config/clip-serve/token &&", shellQuote(cfg.Token)),
-		"chmod 600 ~/.config/clip-serve/token",
+		"mkdir -p ~/.config/rpaster &&",
+		fmt.Sprintf("printf '%%s' %s > ~/.config/rpaster/token &&", shellQuote(cfg.Token)),
+		"chmod 600 ~/.config/rpaster/token",
 	}, " "))
 	if err != nil {
 		return fmt.Errorf("write remote token: %w", err)
@@ -221,8 +221,8 @@ func writeRemoteToken(cfg Config) error {
 }
 
 const (
-	tmuxConfBeginFmt = "# --- clip-serve BEGIN ---"
-	tmuxConfEnd      = "# --- clip-serve END ---"
+	tmuxConfBeginFmt = "# --- rpaster BEGIN ---"
+	tmuxConfEnd      = "# --- rpaster END ---"
 )
 
 // tpmBlock generates the TPM managed block for ~/.tmux.conf.
@@ -270,7 +270,7 @@ func updateRemoteTmuxConf(cfg Config) error {
 	return writeRemoteTmuxConf(cfg.RemoteHost, newContent)
 }
 
-// removeTmuxConfBlock removes the managed clip-serve block from remote ~/.tmux.conf.
+// removeTmuxConfBlock removes the managed rpaster block from remote ~/.tmux.conf.
 func removeTmuxConfBlock(cfg Config) error {
 	out, _ := runRemoteCommand(cfg.RemoteHost, "cat ~/.tmux.conf 2>/dev/null || true")
 	existing := string(out)

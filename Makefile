@@ -6,7 +6,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 build:
 	CGO_ENABLED=0 go build \
 		-ldflags="-X main.version=$(VERSION)" \
-		-o bin/clip-serve ./cmd/clip-serve
+		-o bin/rpaster ./cmd/rpaster
 
 # Run all unit tests with race detector.
 test:
@@ -34,21 +34,21 @@ clean:
 build-darwin-amd64:
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build \
 		-ldflags="-X main.version=$(VERSION) -s -w" \
-		-o dist/clip-serve-darwin-amd64 ./cmd/clip-serve
+		-o dist/rpaster-darwin-amd64 ./cmd/rpaster
 
 build-darwin-arm64:
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build \
 		-ldflags="-X main.version=$(VERSION) -s -w" \
-		-o dist/clip-serve-darwin-arm64 ./cmd/clip-serve
+		-o dist/rpaster-darwin-arm64 ./cmd/rpaster
 
 build-linux-amd64:
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
 		-ldflags="-X main.version=$(VERSION) -s -w" \
-		-o dist/clip-serve-linux-amd64 ./cmd/clip-serve
+		-o dist/rpaster-linux-amd64 ./cmd/rpaster
 
 build-linux-arm64:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
 		-ldflags="-X main.version=$(VERSION) -s -w" \
-		-o dist/clip-serve-linux-arm64 ./cmd/clip-serve
+		-o dist/rpaster-linux-arm64 ./cmd/rpaster
 
 build-all: build-darwin-amd64 build-darwin-arm64 build-linux-amd64 build-linux-arm64

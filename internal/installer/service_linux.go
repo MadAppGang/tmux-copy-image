@@ -13,7 +13,7 @@ import (
 // systemdUnitTemplate is the template for the Linux systemd user unit.
 // Token is passed via Environment= directive (SYNTH-5) — never via ExecStart args.
 const systemdUnitTemplate = `[Unit]
-Description=clip-serve clipboard image HTTP daemon
+Description=rpaster clipboard image HTTP daemon
 After=network.target
 
 [Service]
@@ -37,7 +37,7 @@ type systemdUnitData struct {
 }
 
 // installSystemdService generates and writes the systemd user unit to
-// ~/.config/systemd/user/clip-serve.service with mode 0600.
+// ~/.config/systemd/user/rpaster.service with mode 0600.
 func installSystemdService(cfg Config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -45,7 +45,7 @@ func installSystemdService(cfg Config) error {
 	}
 
 	unitDir := filepath.Join(home, ".config", "systemd", "user")
-	unitPath := filepath.Join(unitDir, "clip-serve.service")
+	unitPath := filepath.Join(unitDir, "rpaster.service")
 
 	data := systemdUnitData{
 		BinaryPath: cfg.BinaryPath,
@@ -97,23 +97,23 @@ func enableSystemdService() error {
 	if out, err := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput(); err != nil {
 		return fmt.Errorf("systemctl daemon-reload: %w: %s", err, out)
 	}
-	if out, err := exec.Command("systemctl", "--user", "enable", "--now", "clip-serve.service").CombinedOutput(); err != nil {
+	if out, err := exec.Command("systemctl", "--user", "enable", "--now", "rpaster.service").CombinedOutput(); err != nil {
 		return fmt.Errorf("systemctl enable: %w: %s", err, out)
 	}
-	fmt.Printf("service enabled and started: clip-serve.service\n")
+	fmt.Printf("service enabled and started: rpaster.service\n")
 	return nil
 }
 
 // disableSystemdService stops and disables the systemd user service.
 func disableSystemdService() error {
-	exec.Command("systemctl", "--user", "disable", "--now", "clip-serve.service").Run() //nolint:errcheck
+	exec.Command("systemctl", "--user", "disable", "--now", "rpaster.service").Run() //nolint:errcheck
 	return nil
 }
 
 // removeSystemdService removes the systemd unit file.
 func removeSystemdService() error {
 	home, _ := os.UserHomeDir()
-	unit := filepath.Join(home, ".config", "systemd", "user", "clip-serve.service")
+	unit := filepath.Join(home, ".config", "systemd", "user", "rpaster.service")
 	if err := os.Remove(unit); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove %s: %w", unit, err)
 	}

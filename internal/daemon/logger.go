@@ -1,4 +1,4 @@
-// Package daemon implements the HTTP server for clip-serve.
+// Package daemon implements the HTTP server for rpaster.
 package daemon
 
 import (

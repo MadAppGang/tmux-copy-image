@@ -46,7 +46,7 @@ type Config struct {
 	Backend    clipboard.Backend
 }
 
-// Server is the clip-serve HTTP daemon.
+// Server is the rpaster HTTP daemon.
 type Server struct {
 	httpServer *http.Server
 	backend    clipboard.Backend
@@ -120,7 +120,7 @@ func (s *Server) Start() error {
 		return fmt.Errorf("listen %s: %w", s.httpServer.Addr, err)
 	}
 
-	s.logger.Info("clip-serve starting",
+	s.logger.Info("rpaster starting",
 		"version", s.version,
 		"port", s.port,
 		"backend", s.backend.Name(),
@@ -180,9 +180,9 @@ func (s *Server) writePIDFile() error {
 		n, _ := f.Read(buf)
 		f.Close()
 		if n > 0 {
-			return fmt.Errorf("clip-serve already running (PID %s)", string(buf[:n]))
+			return fmt.Errorf("rpaster already running (PID %s)", string(buf[:n]))
 		}
-		return fmt.Errorf("clip-serve already running (could not read PID)")
+		return fmt.Errorf("rpaster already running (could not read PID)")
 	}
 
 	// We hold the lock. Write our PID.

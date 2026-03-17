@@ -90,7 +90,7 @@ func (b *macOSBackend) readViaPngpaste(ctx context.Context, maxBytes int64) ([]b
 // osascriptPNG is the AppleScript that tries to extract a PNG from the clipboard.
 // It writes the data to a temp file and returns "png:<path>" or "error:no image".
 const osascriptPNG = `
-set tempFile to (POSIX path of (path to temporary items)) & "clip-serve-" & (do shell script "uuidgen") & ".tmp"
+set tempFile to (POSIX path of (path to temporary items)) & "rpaster-" & (do shell script "uuidgen") & ".tmp"
 try
 	set theData to the clipboard as «class PNGf»
 	set fileRef to open for access POSIX file tempFile with write permission

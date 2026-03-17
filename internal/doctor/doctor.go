@@ -1,4 +1,4 @@
-// Package doctor implements diagnostic checks for the clip-serve installation.
+// Package doctor implements diagnostic checks for the rpaster installation.
 // Run iterates checks in order, formats output, and returns an exit code:
 // 0 = all pass, 1 = at least one fail, 2 = warn-only (no failures).
 package doctor

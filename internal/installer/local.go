@@ -1,4 +1,4 @@
-// Package installer handles installation and removal of clip-serve on local and
+// Package installer handles installation and removal of rpaster on local and
 // remote machines. Local operations manage binary placement and service units.
 // Remote operations push the embedded tmux plugin over SSH/SCP.
 package installer
@@ -15,7 +15,7 @@ import (
 
 // Config holds parameters for install/uninstall operations.
 type Config struct {
-	// BinaryPath is where clip-serve should be installed (default: ~/.local/bin/clip-serve).
+	// BinaryPath is where rpaster should be installed (default: ~/.local/bin/rpaster).
 	BinaryPath string
 
 	// Port is the daemon port to embed in the service unit (default: 18339).
@@ -51,7 +51,7 @@ func (cfg *Config) defaults() error {
 		if err != nil {
 			return fmt.Errorf("home dir: %w", err)
 		}
-		cfg.BinaryPath = filepath.Join(home, ".local", "bin", "clip-serve")
+		cfg.BinaryPath = filepath.Join(home, ".local", "bin", "rpaster")
 	}
 	if cfg.PluginDir == "" {
 		cfg.PluginDir = "~/.tmux/plugins/tmux-clip-image"

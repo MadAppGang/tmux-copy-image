@@ -17,7 +17,7 @@ const launchdPlistTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.clip-serve</string>
+    <string>com.rpaster</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -59,15 +59,15 @@ type launchdPlistData struct {
 }
 
 // installLaunchdService generates and writes the launchd plist to
-// ~/Library/LaunchAgents/com.clip-serve.plist with mode 0600.
+// ~/Library/LaunchAgents/com.rpaster.plist with mode 0600.
 func installLaunchdService(cfg Config) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("home dir: %w", err)
 	}
 
-	logPath := filepath.Join(home, "Library", "Logs", "clip-serve.log")
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.clip-serve.plist")
+	logPath := filepath.Join(home, "Library", "Logs", "rpaster.log")
+	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
 
 	data := launchdPlistData{
 		BinaryPath: cfg.BinaryPath,
@@ -118,19 +118,19 @@ func installLaunchdService(cfg Config) error {
 // loadLaunchdService loads the launchd agent.
 func loadLaunchdService() error {
 	home, _ := os.UserHomeDir()
-	plist := filepath.Join(home, "Library", "LaunchAgents", "com.clip-serve.plist")
+	plist := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
 	out, err := exec.Command("launchctl", "load", "-w", plist).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("launchctl load: %w: %s", err, out)
 	}
-	fmt.Printf("service loaded: com.clip-serve\n")
+	fmt.Printf("service loaded: com.rpaster\n")
 	return nil
 }
 
 // unloadLaunchdService stops and unloads the launchd agent.
 func unloadLaunchdService() error {
 	home, _ := os.UserHomeDir()
-	plist := filepath.Join(home, "Library", "LaunchAgents", "com.clip-serve.plist")
+	plist := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
 	out, err := exec.Command("launchctl", "unload", "-w", plist).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("launchctl unload: %w: %s", err, out)
@@ -141,7 +141,7 @@ func unloadLaunchdService() error {
 // removeLaunchdService removes the plist file.
 func removeLaunchdService() error {
 	home, _ := os.UserHomeDir()
-	plist := filepath.Join(home, "Library", "LaunchAgents", "com.clip-serve.plist")
+	plist := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
 	if err := os.Remove(plist); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove %s: %w", plist, err)
 	}

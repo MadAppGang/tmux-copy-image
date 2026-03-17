@@ -1,4 +1,4 @@
-// clip-serve is the HTTP daemon that exposes local clipboard images over a
+// rpaster is the HTTP daemon that exposes local clipboard images over a
 // loopback HTTP server for use by the tmux plugin over an SSH tunnel.
 package main
 
@@ -32,9 +32,9 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "clip-serve",
+		Use:   "rpaster",
 		Short: "Clipboard image HTTP daemon for tmux remote paste",
-		Long: `clip-serve serves local clipboard images over a loopback HTTP server
+		Long: `rpaster serves local clipboard images over a loopback HTTP server
 so that tmux sessions on remote machines can fetch and paste them via
 an SSH RemoteForward tunnel.`,
 	}
@@ -53,7 +53,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print version and exit",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("clip-serve %s\n", version)
+			fmt.Printf("rpaster %s\n", version)
 		},
 	}
 }
@@ -70,7 +70,7 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the clipboard image HTTP daemon",
-		Long: `Start the clip-serve HTTP daemon on 127.0.0.1:<port>.
+		Long: `Start the rpaster HTTP daemon on 127.0.0.1:<port>.
 
 The daemon reads the system clipboard and serves its content over HTTP.
 Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
@@ -81,7 +81,7 @@ Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
 				if err != nil {
 					return fmt.Errorf("home dir: %w", err)
 				}
-				pidFile = filepath.Join(home, ".local", "share", "clip-serve", "clip-serve.pid")
+				pidFile = filepath.Join(home, ".local", "share", "rpaster", "rpaster.pid")
 			}
 
 			// Read token from env if not provided via flag.
@@ -118,7 +118,7 @@ Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
 	cmd.Flags().StringVar(&token, "token", "", "Bearer token for authentication (empty = disabled). Prefer CLIP_SERVE_TOKEN env var.")
 	cmd.Flags().StringVar(&logFormat, "log-format", "text", `Log format: "text" or "json"`)
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", `Log level: "debug", "info", "warn", "error"`)
-	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Path to PID file (default: ~/.local/share/clip-serve/clip-serve.pid)")
+	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Path to PID file (default: ~/.local/share/rpaster/rpaster.pid)")
 
 	return cmd
 }
@@ -133,7 +133,7 @@ func newDoctorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Run diagnostic checks",
-		Long: `Run end-to-end diagnostic checks for the clip-serve installation.
+		Long: `Run end-to-end diagnostic checks for the rpaster installation.
 
 Checks include: binary availability, clipboard backend, daemon health,
 and service unit presence. Use --remote to also check the remote side.`,
@@ -167,22 +167,22 @@ and service unit presence. Use --remote to also check the remote side.`,
 
 func newInstallCmd() *cobra.Command {
 	var (
-		remoteHost    string
-		port          int
-		token         string
-		pluginDir     string
-		noSSHConfig   bool
-		dryRun        bool
-		binaryPath    string
+		remoteHost  string
+		port        int
+		token       string
+		pluginDir   string
+		noSSHConfig bool
+		dryRun      bool
+		binaryPath  string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install clip-serve and configure the service",
-		Long: `Install clip-serve locally and optionally push the tmux plugin to a remote host.
+		Short: "Install rpaster and configure the service",
+		Long: `Install rpaster locally and optionally push the tmux plugin to a remote host.
 
 Local installation:
-  - Copies the binary to ~/.local/bin/clip-serve (or --binary-path)
+  - Copies the binary to ~/.local/bin/rpaster (or --binary-path)
   - Creates a launchd plist (macOS) or systemd user unit (Linux)
   - Loads/enables the service
 
@@ -237,7 +237,7 @@ Remote installation (requires --remote):
 	cmd.Flags().StringVar(&pluginDir, "plugin-dir", "", "Override remote plugin directory (default: ~/.tmux/plugins/tmux-clip-image)")
 	cmd.Flags().BoolVar(&noSSHConfig, "no-ssh-config", false, "Skip ~/.ssh/config modification")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print what would happen without making any changes")
-	cmd.Flags().StringVar(&binaryPath, "binary-path", "", "Install binary to this path (default: ~/.local/bin/clip-serve)")
+	cmd.Flags().StringVar(&binaryPath, "binary-path", "", "Install binary to this path (default: ~/.local/bin/rpaster)")
 
 	return cmd
 }
@@ -251,8 +251,8 @@ func newUninstallCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove clip-serve and all installed components",
-		Long: `Uninstall clip-serve and reverse all installation steps.
+		Short: "Remove rpaster and all installed components",
+		Long: `Uninstall rpaster and reverse all installation steps.
 
 - Unloads and removes the service unit (launchd/systemd)
 - Removes the installed binary

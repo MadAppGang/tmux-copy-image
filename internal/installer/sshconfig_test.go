@@ -44,10 +44,10 @@ func TestInjectRemoteForward_NewFile(t *testing.T) {
 	if !strings.Contains(content, "RemoteForward 127.0.0.1:18339 127.0.0.1:18339") {
 		t.Errorf("expected RemoteForward in config, got:\n%s", content)
 	}
-	if !strings.Contains(content, "# --- clip-serve BEGIN myhost ---") {
+	if !strings.Contains(content, "# --- rpaster BEGIN myhost ---") {
 		t.Errorf("expected begin marker in config, got:\n%s", content)
 	}
-	if !strings.Contains(content, "# --- clip-serve END myhost ---") {
+	if !strings.Contains(content, "# --- rpaster END myhost ---") {
 		t.Errorf("expected end marker in config, got:\n%s", content)
 	}
 }
@@ -75,7 +75,7 @@ func TestInjectRemoteForward_AppendToExisting(t *testing.T) {
 }
 
 func TestInjectRemoteForward_ReplacesExistingManagedBlock(t *testing.T) {
-	existing := "# --- clip-serve BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:9999 127.0.0.1:9999\n# --- clip-serve END myhost ---\n"
+	existing := "# --- rpaster BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:9999 127.0.0.1:9999\n# --- rpaster END myhost ---\n"
 	configPath := writeTempConfig(t, existing)
 
 	// Inject with new port.
@@ -92,7 +92,7 @@ func TestInjectRemoteForward_ReplacesExistingManagedBlock(t *testing.T) {
 		t.Errorf("expected new port 18339 in config:\n%s", content)
 	}
 	// Should only have one managed block.
-	count := strings.Count(content, "# --- clip-serve BEGIN myhost ---")
+	count := strings.Count(content, "# --- rpaster BEGIN myhost ---")
 	if count != 1 {
 		t.Errorf("expected exactly 1 managed block, found %d in:\n%s", count, content)
 	}
@@ -120,7 +120,7 @@ func TestInjectRemoteForward_SkipsUnmanagedHostBlock(t *testing.T) {
 }
 
 func TestRemoveRemoteForward_RemovesManagedBlock(t *testing.T) {
-	existing := "Host other\n    Port 22\n\n# --- clip-serve BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:18339 127.0.0.1:18339\n# --- clip-serve END myhost ---\n"
+	existing := "Host other\n    Port 22\n\n# --- rpaster BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:18339 127.0.0.1:18339\n# --- rpaster END myhost ---\n"
 	configPath := writeTempConfig(t, existing)
 
 	if err := RemoveRemoteForward("myhost", configPath); err != nil {
@@ -128,7 +128,7 @@ func TestRemoveRemoteForward_RemovesManagedBlock(t *testing.T) {
 	}
 
 	content := readConfig(t, configPath)
-	if strings.Contains(content, "clip-serve BEGIN myhost") {
+	if strings.Contains(content, "rpaster BEGIN myhost") {
 		t.Errorf("expected managed block removed, but still found in:\n%s", content)
 	}
 	if strings.Contains(content, "RemoteForward") {
@@ -182,7 +182,7 @@ func TestInjectRemoteForward_CreatesBackup(t *testing.T) {
 
 	found := false
 	for _, e := range entries {
-		if strings.Contains(e.Name(), ".clip-serve.bak.") {
+		if strings.Contains(e.Name(), ".rpaster.bak.") {
 			found = true
 			break
 		}
@@ -208,7 +208,7 @@ func TestInjectRemoteForward_NoBackupForNewFile(t *testing.T) {
 	}
 
 	for _, e := range entries {
-		if strings.Contains(e.Name(), ".clip-serve.bak.") {
+		if strings.Contains(e.Name(), ".rpaster.bak.") {
 			t.Errorf("unexpected backup file created for new config: %s", e.Name())
 		}
 	}
@@ -223,7 +223,7 @@ func TestHasManagedBlock(t *testing.T) {
 	}{
 		{
 			name:    "has block",
-			content: "# --- clip-serve BEGIN myhost ---\nHost myhost\n# --- clip-serve END myhost ---\n",
+			content: "# --- rpaster BEGIN myhost ---\nHost myhost\n# --- rpaster END myhost ---\n",
 			host:    "myhost",
 			want:    true,
 		},
@@ -235,7 +235,7 @@ func TestHasManagedBlock(t *testing.T) {
 		},
 		{
 			name:    "different host block",
-			content: "# --- clip-serve BEGIN otherhost ---\nHost otherhost\n# --- clip-serve END otherhost ---\n",
+			content: "# --- rpaster BEGIN otherhost ---\nHost otherhost\n# --- rpaster END otherhost ---\n",
 			host:    "myhost",
 			want:    false,
 		},
@@ -266,7 +266,7 @@ func TestHasUnmanagedHost(t *testing.T) {
 		},
 		{
 			name:    "managed host only",
-			content: "# --- clip-serve BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:18339 127.0.0.1:18339\n# --- clip-serve END myhost ---\n",
+			content: "# --- rpaster BEGIN myhost ---\nHost myhost\n    RemoteForward 127.0.0.1:18339 127.0.0.1:18339\n# --- rpaster END myhost ---\n",
 			host:    "myhost",
 			want:    false,
 		},
