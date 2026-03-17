@@ -18,10 +18,14 @@ import (
 	"github.com/jacksteamdev/tmux-image-clipboard/internal/installer"
 )
 
-// version is injected at link time via:
+// Build-time variables injected via ldflags:
 //
-//	go build -ldflags="-X main.version=v1.0.0"
-var version = "dev"
+//	go build -ldflags="-X main.version=v1.0.0 -X main.commit=abc1234 -X main.date=2026-01-01"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
 	root := newRootCmd()
@@ -53,7 +57,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print version and exit",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("rpaster %s\n", version)
+			fmt.Printf("rpaster %s (commit %s, built %s)\n", version, commit, date)
 		},
 	}
 }

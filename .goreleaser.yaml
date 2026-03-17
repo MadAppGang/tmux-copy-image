@@ -1,0 +1,80 @@
+version: 2
+
+project_name: rpaster
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: rpaster
+    binary: rpaster
+    main: ./cmd/rpaster
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: rpaster
+    builds:
+      - rpaster
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: MadAppGang
+    name: tmux-copy-image
+  draft: false
+  prerelease: auto
+
+brews:
+  - name: rpaster
+    repository:
+      owner: MadAppGang
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/MadAppGang/tmux-copy-image"
+    description: "Paste clipboard images into remote tmux sessions over SSH"
+    license: "MIT"
+    install: |
+      bin.install "rpaster"
+    service: |
+      run [opt_bin/"rpaster", "serve"]
+      keep_alive true
+      log_path var/"log/rpaster.log"
+      error_log_path var/"log/rpaster.log"
+    test: |
+      system "#{bin}/rpaster", "version"
