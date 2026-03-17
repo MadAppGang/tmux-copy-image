@@ -77,5 +77,34 @@ brews:
       keep_alive true
       log_path var/"log/rpaster.log"
       error_log_path var/"log/rpaster.log"
+    caveats: |
+      ┌─────────────────────────────────────────────────────┐
+      │  rpaster — clipboard image paste over SSH           │
+      └─────────────────────────────────────────────────────┘
+
+      Step 1: Start the daemon (runs on login automatically)
+
+        brew services start rpaster
+
+      Step 2: Add SSH tunnel to your remote host(s)
+
+        Add to ~/.ssh/config:
+
+          Host your-remote-host
+              RemoteForward 127.0.0.1:18339 127.0.0.1:18339
+
+      Step 3: Install tmux plugin on the remote machine
+
+        rpaster install --remote your-remote-host
+
+        Or manually: https://github.com/MadAppGang/tmux-copy-image#remote-setup
+
+      Step 4: Use it!
+
+        SSH to your remote, open tmux, copy an image locally,
+        then press:  prefix + V
+
+      Verify:    rpaster doctor
+      Full docs: https://github.com/MadAppGang/tmux-copy-image
     test: |
       system "#{bin}/rpaster", "version"
