@@ -1,0 +1,36 @@
+# Binaries
+bin/
+dist/
+/clip-serve
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+*.out
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session data
+ai-docs/
+
+# Plugin analysis
+.claudemem/
+.claude/
+
+# Embedded plugin copy (generated)
+internal/embedded/plugin/
