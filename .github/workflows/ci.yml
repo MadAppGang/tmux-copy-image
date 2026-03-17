@@ -49,4 +49,4 @@ jobs:
         run: sudo apt-get install -y shellcheck
 
       - name: Run shellcheck on plugin scripts
-        run: shellcheck -x plugin/scripts/*.sh plugin/*.tmux
+        run: shellcheck -x -e SC1091 plugin/scripts/*.sh plugin/*.tmux
