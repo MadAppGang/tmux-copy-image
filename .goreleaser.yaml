@@ -70,6 +70,8 @@ brews:
     homepage: "https://github.com/MadAppGang/tmux-copy-image"
     description: "Paste clipboard images into remote tmux sessions over SSH"
     license: "MIT"
+    dependencies:
+      - name: pngpaste
     install: |
       bin.install "rpaster"
     service: |
@@ -86,20 +88,11 @@ brews:
 
         brew services start rpaster
 
-      Step 2: Add SSH tunnel to your remote host(s)
-
-        Add to ~/.ssh/config:
-
-          Host your-remote-host
-              RemoteForward 127.0.0.1:18339 127.0.0.1:18339
-
-      Step 3: Install tmux plugin on the remote machine
+      Step 2: Set up your remote host(s) (plugin + SSH tunnel)
 
         rpaster install --remote your-remote-host
 
-        Or manually: https://github.com/MadAppGang/tmux-copy-image#remote-setup
-
-      Step 4: Use it!
+      Step 3: Use it!
 
         SSH to your remote, open tmux, copy an image locally,
         then press:  prefix + V
