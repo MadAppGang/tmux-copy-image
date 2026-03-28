@@ -233,17 +233,23 @@ func (c *serviceCheck) checkLaunchd() Result {
 			Description: "service unit: cannot determine home directory",
 		}
 	}
-	plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.rpaster.plist")
-	if _, err := os.Stat(plistPath); err != nil {
-		return Result{
-			Status:      StatusWarn,
-			Description: "service unit: launchd plist not found at ~/Library/LaunchAgents/com.rpaster.plist",
-			Remediation: "Run: rpaster install  to create the service unit",
+	launchAgents := filepath.Join(home, "Library", "LaunchAgents")
+	candidates := []string{
+		filepath.Join(launchAgents, "homebrew.mxcl.rpaster.plist"),
+		filepath.Join(launchAgents, "com.rpaster.plist"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return Result{
+				Status:      StatusPass,
+				Description: fmt.Sprintf("service unit: launchd plist found at %s", p),
+			}
 		}
 	}
 	return Result{
-		Status:      StatusPass,
-		Description: fmt.Sprintf("service unit: launchd plist found at %s", plistPath),
+		Status:      StatusWarn,
+		Description: "service unit: launchd plist not found",
+		Remediation: "Run: brew services start rpaster  (or: rpaster install)",
 	}
 }
 
