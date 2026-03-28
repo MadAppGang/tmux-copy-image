@@ -98,24 +98,34 @@ func TestInjectRemoteForward_ReplacesExistingManagedBlock(t *testing.T) {
 	}
 }
 
-func TestInjectRemoteForward_SkipsUnmanagedHostBlock(t *testing.T) {
-	// An existing un-managed Host block should cause a warning and no modification.
+func TestInjectRemoteForward_InjectsIntoUnmanagedHostBlock(t *testing.T) {
+	// An existing un-managed Host block should get RemoteForward injected into it.
 	existing := "Host myhost\n    IdentityFile ~/.ssh/mykey\n"
 	configPath := writeTempConfig(t, existing)
 
-	// Capture stdout by redirecting... we just check file is unchanged.
 	if err := InjectRemoteForward("myhost", 18339, configPath); err != nil {
 		t.Fatalf("InjectRemoteForward returned error for unmanaged host: %v", err)
 	}
 
 	content := readConfig(t, configPath)
-	// The file should NOT have been modified with a RemoteForward.
-	if strings.Contains(content, "RemoteForward") {
-		t.Errorf("expected file unchanged (no RemoteForward added), got:\n%s", content)
+	// RemoteForward should have been injected.
+	if !strings.Contains(content, "RemoteForward 127.0.0.1:18339 127.0.0.1:18339") {
+		t.Errorf("expected RemoteForward injected, got:\n%s", content)
 	}
-	// The original content should be preserved.
-	if content != existing {
-		t.Errorf("expected config unchanged, got:\n%s", content)
+	// Original content should be preserved.
+	if !strings.Contains(content, "IdentityFile ~/.ssh/mykey") {
+		t.Errorf("expected original IdentityFile to remain, got:\n%s", content)
+	}
+	// Host line should still be there (not duplicated).
+	if strings.Count(content, "Host myhost") != 1 {
+		t.Errorf("expected exactly 1 'Host myhost', got:\n%s", content)
+	}
+	// Should have managed markers (inline).
+	if !strings.Contains(content, "# --- rpaster BEGIN myhost ---") {
+		t.Errorf("expected begin marker in config, got:\n%s", content)
+	}
+	if !strings.Contains(content, "# --- rpaster END myhost ---") {
+		t.Errorf("expected end marker in config, got:\n%s", content)
 	}
 }
 
@@ -137,6 +147,31 @@ func TestRemoveRemoteForward_RemovesManagedBlock(t *testing.T) {
 	// Other content should remain.
 	if !strings.Contains(content, "Host other") {
 		t.Errorf("expected 'Host other' to remain after removal")
+	}
+}
+
+func TestRemoveRemoteForward_RemovesInlineDirective(t *testing.T) {
+	// Simulate the inline injection format: markers inside an existing Host block.
+	existing := "Host myhost\n    # --- rpaster BEGIN myhost ---\n    RemoteForward 127.0.0.1:18339 127.0.0.1:18339\n    # --- rpaster END myhost ---\n    IdentityFile ~/.ssh/mykey\n"
+	configPath := writeTempConfig(t, existing)
+
+	if err := RemoveRemoteForward("myhost", configPath); err != nil {
+		t.Fatalf("RemoveRemoteForward: %v", err)
+	}
+
+	content := readConfig(t, configPath)
+	if strings.Contains(content, "rpaster BEGIN myhost") {
+		t.Errorf("expected inline markers removed, but still found in:\n%s", content)
+	}
+	if strings.Contains(content, "RemoteForward") {
+		t.Errorf("expected RemoteForward removed, but still found in:\n%s", content)
+	}
+	// Host and other directives should remain.
+	if !strings.Contains(content, "Host myhost") {
+		t.Errorf("expected 'Host myhost' to remain after removal")
+	}
+	if !strings.Contains(content, "IdentityFile ~/.ssh/mykey") {
+		t.Errorf("expected IdentityFile to remain after removal")
 	}
 }
 

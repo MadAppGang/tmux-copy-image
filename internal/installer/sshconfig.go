@@ -31,12 +31,29 @@ func managedBlock(host string, port int) string {
 	)
 }
 
+// remoteForwardDirective returns the RemoteForward line (without newline) for
+// embedding into an existing Host block.
+func remoteForwardDirective(port int) string {
+	return fmt.Sprintf("    RemoteForward 127.0.0.1:%d 127.0.0.1:%d", port, port)
+}
+
+// managedDirective returns a RemoteForward line wrapped in inline markers for
+// injection into an existing Host block.
+func managedDirective(host string, port int) string {
+	return fmt.Sprintf("    %s\n%s\n    %s",
+		fmt.Sprintf(markerBeginFmt, host),
+		remoteForwardDirective(port),
+		fmt.Sprintf(markerEndFmt, host),
+	)
+}
+
 // InjectRemoteForward adds a managed RemoteForward block for host/port to the
 // SSH config file at configPath.
 //
-// Rules (SYNTH-1):
-//   - If an existing un-managed "Host <hostname>" block is found, warn and skip.
-//   - If a managed block for this host already exists, overwrite it in-place.
+// Rules:
+//   - If a managed block/directive for this host already exists, overwrite it in-place.
+//   - If an existing un-managed "Host <hostname>" block is found, inject a managed
+//     RemoteForward directive into it.
 //   - Otherwise, append a new managed block.
 //   - A backup is created at <configPath>.rpaster.bak.<timestamp> before any write.
 //   - The write is atomic (temp file + rename).
@@ -44,14 +61,6 @@ func InjectRemoteForward(host string, port int, configPath string) error {
 	existing, err := readSSHConfig(configPath)
 	if err != nil {
 		return err
-	}
-
-	// Check for an un-managed Host block first.
-	if hasUnmanagedHost(existing, host) {
-		fmt.Printf("warning: existing un-managed 'Host %s' found in %s\n", host, configPath)
-		fmt.Printf("  To enable the SSH tunnel, manually add this to your SSH config:\n\n")
-		fmt.Printf("  %s\n", managedBlock(host, port))
-		return nil
 	}
 
 	// Back up the config before modifying.
@@ -62,6 +71,8 @@ func InjectRemoteForward(host string, port int, configPath string) error {
 	var newContent string
 	if hasManagedBlock(existing, host) {
 		newContent = replaceManagedBlock(existing, host, port)
+	} else if hasUnmanagedHost(existing, host) {
+		newContent = injectIntoExistingHost(existing, host, port)
 	} else {
 		newContent = appendManagedBlock(existing, host, port)
 	}
@@ -69,8 +80,8 @@ func InjectRemoteForward(host string, port int, configPath string) error {
 	return writeSSHConfig(configPath, newContent)
 }
 
-// RemoveRemoteForward removes the managed block for host from the SSH config
-// at configPath. If no managed block is found, it returns nil.
+// RemoveRemoteForward removes the managed block or inline directive for host
+// from the SSH config at configPath. If no managed block is found, returns nil.
 func RemoveRemoteForward(host, configPath string) error {
 	existing, err := readSSHConfig(configPath)
 	if err != nil {
@@ -130,6 +141,38 @@ func writeSSHConfig(configPath, content string) error {
 		return fmt.Errorf("rename ssh config: %w", err)
 	}
 	return nil
+}
+
+// injectIntoExistingHost inserts a managed RemoteForward directive into an
+// existing un-managed Host block. The directive is placed right after the
+// "Host <host>" line.
+func injectIntoExistingHost(content, host string, port int) string {
+	hostRe := regexp.MustCompile(`(?i)^\s*Host\s+` + regexp.QuoteMeta(host) + `\s*$`)
+	inManaged := false
+	beginMarker := fmt.Sprintf(markerBeginFmt, host)
+	endMarker := fmt.Sprintf(markerEndFmt, host)
+	injected := false
+
+	var result strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, beginMarker) {
+			inManaged = true
+		}
+		if strings.Contains(line, endMarker) {
+			inManaged = false
+		}
+		result.WriteString(line)
+		result.WriteByte('\n')
+		// Inject after the first un-managed Host line.
+		if !injected && !inManaged && hostRe.MatchString(line) {
+			result.WriteString(managedDirective(host, port))
+			result.WriteByte('\n')
+			injected = true
+		}
+	}
+	return result.String()
 }
 
 // hasUnmanagedHost returns true if the config contains "Host <host>" outside

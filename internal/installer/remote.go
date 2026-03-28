@@ -10,37 +10,64 @@ import (
 	"strings"
 )
 
-// RunRemote installs the tmux plugin on the remote host via SSH/SCP and
-// optionally updates the remote ~/.tmux.conf with a managed TPM block.
+// tpmPluginRepo is the GitHub org/repo used by TPM to clone the plugin.
+const tpmPluginRepo = "MadAppGang/tmux-copy-image"
+
+// RunRemote installs the tmux plugin on the remote host.
 //
-// Steps:
+// When TPM is detected on the remote, uses native TPM installation:
 //  1. Verify remote tmux version (abort if < 3.0).
-//  2. Create remote plugin directory.
-//  3. Extract embedded plugin files via scp.
-//  4. Write token file to ~/.config/rpaster/token (mode 0600) if token is set.
-//  5. Detect TPM and update remote ~/.tmux.conf with managed markers.
-//  6. Reload tmux config if a session is running.
+//  2. Add `set -g @plugin` to remote ~/.tmux.conf.
+//  3. Run TPM's install_plugins script to clone the plugin.
+//  4. Write token file if set.
+//
+// When TPM is not detected, falls back to manual installation:
+//  1. Verify remote tmux version (abort if < 3.0).
+//  2. Copy embedded plugin files via scp.
+//  3. Add `run-shell` to remote ~/.tmux.conf.
+//  4. Write token file if set.
+//  5. Reload tmux config.
 func RunRemote(cfg Config) error {
 	if err := cfg.defaults(); err != nil {
 		return err
 	}
 
-	if cfg.PluginFS == nil {
-		return fmt.Errorf("PluginFS is required for remote installation")
+	// Check tmux version first (required for both paths).
+	if err := checkRemoteTmuxVersion(cfg); err != nil {
+		return err
 	}
 
-	steps := []func() error{
-		func() error { return checkRemoteTmuxVersion(cfg) },
-		func() error { return createRemotePluginDir(cfg) },
-		func() error { return copyPluginFiles(cfg) },
-		func() error { return writeRemoteToken(cfg) },
-		func() error { return updateRemoteTmuxConf(cfg) },
-		func() error { return reloadRemoteTmux(cfg) },
-	}
+	// Detect whether the remote has TPM installed.
+	hasTPM := remoteHasTPM(cfg)
 
-	for _, step := range steps {
-		if err := step(); err != nil {
-			return err
+	if hasTPM {
+		fmt.Println("TPM detected on remote — using native plugin installation")
+		steps := []func() error{
+			func() error { return updateRemoteTmuxConf(cfg, true) },
+			func() error { return runTPMInstall(cfg) },
+			func() error { return writeRemoteToken(cfg) },
+		}
+		for _, step := range steps {
+			if err := step(); err != nil {
+				return err
+			}
+		}
+	} else {
+		fmt.Println("TPM not found on remote — copying plugin files directly")
+		if cfg.PluginFS == nil {
+			return fmt.Errorf("PluginFS is required for remote installation without TPM")
+		}
+		steps := []func() error{
+			func() error { return createRemotePluginDir(cfg) },
+			func() error { return copyPluginFiles(cfg) },
+			func() error { return updateRemoteTmuxConf(cfg, false) },
+			func() error { return writeRemoteToken(cfg) },
+			func() error { return reloadRemoteTmux(cfg) },
+		}
+		for _, step := range steps {
+			if err := step(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -75,6 +102,39 @@ func UninstallRemote(cfg Config) error {
 		fmt.Printf("warning: remove tmux.conf block: %v\n", err)
 	}
 
+	return nil
+}
+
+// remoteHasTPM checks whether TPM is installed on the remote host by looking
+// for the install_plugins script.
+func remoteHasTPM(cfg Config) bool {
+	if cfg.DryRun {
+		return false // can't check in dry-run, assume no TPM
+	}
+	out, err := runRemoteCommand(cfg.RemoteHost,
+		"test -x ~/.tmux/plugins/tpm/bin/install_plugins && echo yes")
+	return err == nil && strings.TrimSpace(string(out)) == "yes"
+}
+
+// runTPMInstall runs TPM's install_plugins script on the remote host to clone
+// and set up the plugin. Reloads tmux config first so TPM sees the new plugin entry.
+func runTPMInstall(cfg Config) error {
+	if cfg.DryRun {
+		fmt.Printf("[dry-run] would run TPM install_plugins on %s\n", cfg.RemoteHost)
+		return nil
+	}
+
+	// Reload tmux config so TPM picks up the new @plugin line.
+	_, _ = runRemoteCommand(cfg.RemoteHost,
+		"tmux source-file ~/.tmux.conf 2>/dev/null || true")
+
+	// Run TPM's install script.
+	out, err := runRemoteCommand(cfg.RemoteHost,
+		"~/.tmux/plugins/tpm/bin/install_plugins")
+	if err != nil {
+		return fmt.Errorf("TPM install_plugins failed on %s: %w: %s", cfg.RemoteHost, err, out)
+	}
+	fmt.Printf("TPM installed plugin on %s\n", cfg.RemoteHost)
 	return nil
 }
 
@@ -225,18 +285,29 @@ const (
 	tmuxConfEnd      = "# --- rpaster END ---"
 )
 
-// tpmBlock generates the TPM managed block for ~/.tmux.conf.
-func tpmBlock(pluginDir string) string {
-	return fmt.Sprintf("%s\nset -g @plugin %s\n%s\n",
+// tmuxBlock generates a managed block for ~/.tmux.conf.
+// When TPM is present, it emits `set -g @plugin 'org/repo'` (native TPM).
+// Otherwise, it emits a `run-shell` directive that works without TPM.
+func tmuxBlock(pluginDir string, useTPM bool) string {
+	if useTPM {
+		return fmt.Sprintf("%s\nset -g @plugin '%s'\n%s\n",
+			tmuxConfBeginFmt,
+			tpmPluginRepo,
+			tmuxConfEnd,
+		)
+	}
+	entryPoint := expandRemoteTilde(pluginDir) + "/tmux-clip-image.tmux"
+	return fmt.Sprintf("%s\nrun-shell %s\n%s\n",
 		tmuxConfBeginFmt,
-		shellQuote(pluginDir),
+		shellQuote(entryPoint),
 		tmuxConfEnd,
 	)
 }
 
-// updateRemoteTmuxConf adds a managed TPM plugin entry to ~/.tmux.conf on the
-// remote host if TPM is detected. If an entry already exists, it is replaced.
-func updateRemoteTmuxConf(cfg Config) error {
+// updateRemoteTmuxConf adds a managed plugin entry to ~/.tmux.conf on the
+// remote host. Uses `set -g @plugin` when useTPM is true, otherwise uses
+// `run-shell` so it works without any plugin manager.
+func updateRemoteTmuxConf(cfg Config, useTPM bool) error {
 	if cfg.DryRun {
 		fmt.Printf("[dry-run] would update ~/.tmux.conf on %s\n", cfg.RemoteHost)
 		return nil
@@ -244,29 +315,20 @@ func updateRemoteTmuxConf(cfg Config) error {
 
 	pluginDir := cfg.PluginDir // keep tilde for display
 
-	// Check if TPM is already configured (look for tpm in tmux.conf).
 	out, _ := runRemoteCommand(cfg.RemoteHost, "cat ~/.tmux.conf 2>/dev/null || true")
 	existing := string(out)
 
-	// Check if managed block already exists.
+	// Replace existing managed block if present.
 	if strings.Contains(existing, tmuxConfBeginFmt) {
-		// Replace existing managed block.
-		newContent := replaceRemoteTmuxBlock(existing, pluginDir)
+		newContent := replaceRemoteTmuxBlock(existing, pluginDir, useTPM)
 		return writeRemoteTmuxConf(cfg.RemoteHost, newContent)
-	}
-
-	// Check if TPM is configured at all (only add plugin entry if so).
-	if !strings.Contains(existing, "tpm") {
-		fmt.Printf("hint: TPM not detected on %s — add to ~/.tmux.conf manually:\n  set -g @plugin %s\n",
-			cfg.RemoteHost, shellQuote(pluginDir))
-		return nil
 	}
 
 	// Append managed block.
 	if existing != "" && !strings.HasSuffix(existing, "\n") {
 		existing += "\n"
 	}
-	newContent := existing + "\n" + tpmBlock(pluginDir)
+	newContent := existing + "\n" + tmuxBlock(pluginDir, useTPM)
 	return writeRemoteTmuxConf(cfg.RemoteHost, newContent)
 }
 
@@ -282,7 +344,7 @@ func removeTmuxConfBlock(cfg Config) error {
 }
 
 // replaceRemoteTmuxBlock replaces the managed block in existing tmux.conf content.
-func replaceRemoteTmuxBlock(content, pluginDir string) string {
+func replaceRemoteTmuxBlock(content, pluginDir string, useTPM bool) string {
 	var result strings.Builder
 	inBlock := false
 	blockWritten := false
@@ -292,7 +354,7 @@ func replaceRemoteTmuxBlock(content, pluginDir string) string {
 		if strings.Contains(line, tmuxConfBeginFmt) {
 			inBlock = true
 			if !blockWritten {
-				result.WriteString(tpmBlock(pluginDir))
+				result.WriteString(tmuxBlock(pluginDir, useTPM))
 				blockWritten = true
 			}
 			continue
@@ -359,6 +421,7 @@ func runRemoteCommand(host, command string) ([]byte, error) {
 	cmd := exec.Command("ssh",
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=30",
+		"-o", "RemoteCommand=none",
 		host,
 		command,
 	)
