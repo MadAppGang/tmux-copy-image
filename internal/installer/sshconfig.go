@@ -2,6 +2,7 @@ package installer
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,6 +46,133 @@ func managedDirective(host string, port int) string {
 		remoteForwardDirective(port),
 		fmt.Sprintf(markerEndFmt, host),
 	)
+}
+
+// SessionSocketPath returns the deterministic remote socket path for a given
+// SSH session connection string (the SSH_CONNECTION environment variable).
+//
+// The socket name is /tmp/rpaster-<16hexchars>.sock where the hex is derived
+// from the first 8 bytes of SHA-256(sshConnection).
+//
+// Example:
+//
+//	SSH_CONNECTION="10.0.1.5 54312 10.0.1.10 22"
+//	→ /tmp/rpaster-3fa8bc12d7e4910f.sock
+func SessionSocketPath(sshConnection string) string {
+	h := sha256.Sum256([]byte(sshConnection))
+	return fmt.Sprintf("/tmp/rpaster-%x.sock", h[:8])
+}
+
+// HostnameSocketPath returns the static hostname-keyed socket path used by the
+// installer when writing a StreamLocalForward directive for a given SSH host.
+// This is the simpler fallback when per-session unique paths are not needed.
+//
+// Example: host="m5" → "/tmp/rpaster-m5.sock"
+func HostnameSocketPath(host string) string {
+	// Sanitise host: keep only alphanumeric and hyphen characters.
+	var sb strings.Builder
+	for _, r := range host {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			sb.WriteRune(r)
+		}
+	}
+	return fmt.Sprintf("/tmp/rpaster-%s.sock", sb.String())
+}
+
+// socketForwardDirective returns a RemoteForward line for Unix socket forwarding.
+// Uses RemoteForward (not StreamLocalForward) because Apple's macOS OpenSSH
+// does not support StreamLocalForward, but RemoteForward with socket paths works.
+//
+// Also adds StreamLocalBindUnlink to clean up stale sockets from previous sessions.
+//
+//	RemoteForward <remote-socket> <local-socket>
+func socketForwardDirective(remoteSocket, localSocket string) string {
+	return fmt.Sprintf("    StreamLocalBindUnlink yes\n    RemoteForward %s %s", remoteSocket, localSocket)
+}
+
+// managedUnixBlock returns a managed SSH config block with both TCP
+// RemoteForward (backward compat) and Unix socket RemoteForward.
+//
+// remoteSocket is the path on the remote side (e.g. /tmp/rpaster-m5.sock).
+// localSocket  is the local daemon socket  (e.g. /tmp/rpaster.sock).
+func managedUnixBlock(host string, port int, remoteSocket, localSocket string) string {
+	return fmt.Sprintf("%s\nHost %s\n    RemoteForward 127.0.0.1:%d 127.0.0.1:%d\n%s\n%s\n",
+		fmt.Sprintf(markerBeginFmt, host),
+		host,
+		port,
+		port,
+		socketForwardDirective(remoteSocket, localSocket),
+		fmt.Sprintf(markerEndFmt, host),
+	)
+}
+
+// InjectStreamLocalForward adds a managed SSH config block that includes both
+// a TCP RemoteForward (backward compat) and a Unix StreamLocalForward for the
+// given host to the SSH config at configPath.
+//
+// Behaviour mirrors InjectRemoteForward: backup, in-place replace, or append.
+func InjectStreamLocalForward(host string, port int, remoteSocket, localSocket, configPath string) error {
+	existing, err := readSSHConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	if err := backupSSHConfig(configPath, existing); err != nil {
+		return err
+	}
+
+	var newContent string
+	if hasManagedBlock(existing, host) {
+		newContent = replaceManagedUnixBlock(existing, host, port, remoteSocket, localSocket)
+	} else {
+		newContent = appendManagedUnixBlock(existing, host, port, remoteSocket, localSocket)
+	}
+
+	return writeSSHConfig(configPath, newContent)
+}
+
+// replaceManagedUnixBlock replaces the existing managed block for host with a
+// new unix block (TCP + StreamLocalForward).
+func replaceManagedUnixBlock(content, host string, port int, remoteSocket, localSocket string) string {
+	beginMarker := fmt.Sprintf(markerBeginFmt, host)
+	endMarker := fmt.Sprintf(markerEndFmt, host)
+
+	var result strings.Builder
+	inBlock := false
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	blockWritten := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, beginMarker) {
+			inBlock = true
+			if !blockWritten {
+				result.WriteString(managedUnixBlock(host, port, remoteSocket, localSocket))
+				blockWritten = true
+			}
+			continue
+		}
+		if inBlock {
+			if strings.Contains(line, endMarker) {
+				inBlock = false
+			}
+			continue
+		}
+		result.WriteString(line)
+		result.WriteByte('\n')
+	}
+	return result.String()
+}
+
+// appendManagedUnixBlock appends a managed unix block for host to the end of content.
+func appendManagedUnixBlock(content, host string, port int, remoteSocket, localSocket string) string {
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if content != "" {
+		content += "\n"
+	}
+	return content + managedUnixBlock(host, port, remoteSocket, localSocket)
 }
 
 // InjectRemoteForward adds a managed RemoteForward block for host/port to the

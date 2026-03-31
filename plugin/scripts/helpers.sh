@@ -13,6 +13,32 @@ clip_option() {
     printf '%s' "${val:-$default_val}"
 }
 
+# rpaster_resolve_endpoint
+# Resolves the rpaster endpoint, preferring a Unix socket when available.
+#
+# Sets (and exports) two variables after calling this function:
+#   RPASTER_BASE             — base URL (e.g. "http://localhost" or "http://127.0.0.1:18339")
+#   RPASTER_CURL_SOCK_ARGS   — array of extra curl flags (e.g. (--unix-socket /tmp/rpaster.sock))
+#
+# Usage:
+#   rpaster_resolve_endpoint
+#   curl --silent "${RPASTER_CURL_SOCK_ARGS[@]}" "${RPASTER_BASE}/health"
+rpaster_resolve_endpoint() {
+    local sock
+    sock="$(tmux show-environment RPASTER_SOCKET 2>/dev/null | cut -d= -f2-)"
+    if [ -n "${sock}" ] && [ -S "${sock}" ]; then
+        RPASTER_BASE="http://localhost"
+        RPASTER_CURL_SOCK_ARGS=(--unix-socket "${sock}")
+    else
+        local p
+        p="$(tmux show-option -gqv "@clip-image-port" 2>/dev/null)"
+        p="${p:-18339}"
+        RPASTER_BASE="http://127.0.0.1:${p}"
+        RPASTER_CURL_SOCK_ARGS=()
+    fi
+    export RPASTER_BASE RPASTER_CURL_SOCK_ARGS
+}
+
 # clip_display_error MESSAGE [DURATION_MS]
 # Displays an error message in the tmux status bar.
 clip_display_error() {

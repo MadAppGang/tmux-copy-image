@@ -23,13 +23,15 @@ source "${SCRIPT_DIR}/detect-claude.sh"
 # ---------------------------------------------------------------------------
 # Read plugin options (all reads happen at invocation time, not startup).
 # ---------------------------------------------------------------------------
-port="$(clip_option "port" "18339")"
 save_dir="$(clip_option "save-dir" "")"
 health_timeout="$(clip_option "health-timeout" "2")"
 meta_timeout="$(clip_option "meta-timeout" "5")"
 download_timeout="$(clip_option "download-timeout" "10")"
 msg_duration="$(clip_option "msg-duration" "3000")"
 claude_detect="$(clip_option "claude-detect" "auto")"
+
+# Resolve the rpaster endpoint: sets RPASTER_BASE and RPASTER_CURL_SOCK_ARGS.
+rpaster_resolve_endpoint
 
 # Default save directory to $TMPDIR or /tmp.
 if [ -z "${save_dir}" ]; then
@@ -59,14 +61,13 @@ find "${save_dir}" -maxdepth 1 -name "clip-*" -mmin +360 -delete 2>/dev/null || 
 
 # ---------------------------------------------------------------------------
 # Step 2: Health check — verify daemon is reachable.
-# FR-P-20: "clip-image: cannot reach rpaster (is SSH tunnel up?)"
+# FR-P-20: "clip-image: cannot reach rpaster (run: rpaster doctor)"
 # ---------------------------------------------------------------------------
-base_url="http://127.0.0.1:${port}"
-
 if ! curl --silent --max-time "${health_timeout}" --max-redirs 0 \
         --output /dev/null \
-        "${base_url}/health" 2>/dev/null; then
-    clip_display_error "cannot reach rpaster (is SSH tunnel up?)" "${msg_duration}"
+        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        "${RPASTER_BASE}/health" 2>/dev/null; then
+    clip_display_error "cannot reach rpaster (run: rpaster doctor)" "${msg_duration}"
     exit 1
 fi
 
@@ -78,10 +79,12 @@ meta_raw=""
 if [ -f "${token_file}" ] && [ -r "${token_file}" ]; then
     meta_raw="$(curl --silent --max-time "${meta_timeout}" --max-redirs 0 \
         --config <(printf 'header = "Authorization: Bearer %s"' "$(cat "${token_file}")") \
-        "${base_url}/image/meta?format=shell" 2>/dev/null)" || true
+        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        "${RPASTER_BASE}/image/meta?format=shell" 2>/dev/null)" || true
 else
     meta_raw="$(curl --silent --max-time "${meta_timeout}" --max-redirs 0 \
-        "${base_url}/image/meta?format=shell" 2>/dev/null)" || true
+        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        "${RPASTER_BASE}/image/meta?format=shell" 2>/dev/null)" || true
 fi
 
 if [ -z "${meta_raw}" ]; then
@@ -130,14 +133,16 @@ curl_exit=0
 if [ -f "${token_file}" ] && [ -r "${token_file}" ]; then
     http_status="$(curl --silent --max-time "${download_timeout}" --max-redirs 0 \
         --config <(printf 'header = "Authorization: Bearer %s"' "$(cat "${token_file}")") \
+        "${RPASTER_CURL_SOCK_ARGS[@]}" \
         --output "${save_path}" \
         --write-out "%{http_code}" \
-        "${base_url}/image" 2>/dev/null)" || curl_exit=$?
+        "${RPASTER_BASE}/image" 2>/dev/null)" || curl_exit=$?
 else
     http_status="$(curl --silent --max-time "${download_timeout}" --max-redirs 0 \
+        "${RPASTER_CURL_SOCK_ARGS[@]}" \
         --output "${save_path}" \
         --write-out "%{http_code}" \
-        "${base_url}/image" 2>/dev/null)" || curl_exit=$?
+        "${RPASTER_BASE}/image" 2>/dev/null)" || curl_exit=$?
 fi
 
 # FR-P-22: curl timeout (exit code 28)

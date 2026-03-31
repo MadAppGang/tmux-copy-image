@@ -38,12 +38,18 @@ const (
 // Config holds the configuration for the HTTP daemon.
 type Config struct {
 	Port       int
+	UnixSocket string // path for Unix domain socket listener (e.g., /tmp/rpaster.sock); empty to disable
 	Token      string
 	LogFormat  string // "text" or "json"
 	LogLevel   string // "debug", "info", "warn", "error"
 	PIDFile    string
 	Version    string
 	Backend    clipboard.Backend
+}
+
+// DefaultUnixSocket returns the default Unix socket path for the daemon.
+func DefaultUnixSocket() string {
+	return "/tmp/rpaster.sock"
 }
 
 // Server is the rpaster HTTP daemon.
@@ -55,6 +61,9 @@ type Server struct {
 	port       int
 	startTime  time.Time
 	logger     *slog.Logger
+
+	// unixSocket is the path to the Unix domain socket; empty if not configured.
+	unixSocket string
 
 	// Clipboard cache: reduces double-reads for /image/meta + /image in the
 	// same paste operation, and serialises concurrent clipboard calls.
@@ -77,19 +86,21 @@ type Server struct {
 // New constructs a Server from the given Config.
 func New(cfg Config) *Server {
 	return &Server{
-		backend:   cfg.Backend,
-		token:     cfg.Token,
-		version:   cfg.Version,
-		port:      cfg.Port,
-		startTime: time.Now(),
-		sem:       make(chan struct{}, maxConcurrentClipboard),
-		pidFile:   cfg.PIDFile,
-		logger:    buildLogger(cfg.LogFormat, cfg.LogLevel),
+		backend:    cfg.Backend,
+		token:      cfg.Token,
+		version:    cfg.Version,
+		port:       cfg.Port,
+		unixSocket: cfg.UnixSocket,
+		startTime:  time.Now(),
+		sem:        make(chan struct{}, maxConcurrentClipboard),
+		pidFile:    cfg.PIDFile,
+		logger:     buildLogger(cfg.LogFormat, cfg.LogLevel),
 	}
 }
 
-// Start begins listening on 127.0.0.1:<port> and serves requests until a
-// SIGTERM or SIGINT is received, then performs a graceful shutdown.
+// Start begins listening on 127.0.0.1:<port> (and optionally a Unix domain
+// socket) and serves requests until a SIGTERM or SIGINT is received, then
+// performs a graceful shutdown.
 func (s *Server) Start() error {
 	if err := s.writePIDFile(); err != nil {
 		return fmt.Errorf("pid file: %w", err)
@@ -115,9 +126,28 @@ func (s *Server) Start() error {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
 
-	listener, err := net.Listen("tcp", s.httpServer.Addr)
+	// TCP listener (always present, backward compat).
+	tcpListener, err := net.Listen("tcp", s.httpServer.Addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", s.httpServer.Addr, err)
+	}
+
+	// Unix socket listener (optional).
+	var unixListener net.Listener
+	if s.unixSocket != "" {
+		var unixErr error
+		unixListener, unixErr = listenUnix(s.unixSocket)
+		if unixErr != nil {
+			// Non-fatal: log and continue with TCP only.
+			s.logger.Warn("unix socket unavailable, TCP only", "error", unixErr)
+		} else {
+			s.logger.Info("listening on unix socket", "path", s.unixSocket)
+			// Clean up socket file on shutdown.
+			defer func() {
+				unixListener.Close()
+				os.Remove(s.unixSocket)
+			}()
+		}
 	}
 
 	s.logger.Info("rpaster starting",
@@ -125,6 +155,7 @@ func (s *Server) Start() error {
 		"port", s.port,
 		"backend", s.backend.Name(),
 		"token_auth", s.token != "",
+		"unix_socket", s.unixSocket,
 	)
 	s.logger.Info("listening", "addr", s.httpServer.Addr)
 
@@ -132,14 +163,24 @@ func (s *Server) Start() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Serve in background.
-	serveErr := make(chan error, 1)
+	// serveErr collects errors from all listeners; buffered for 2 goroutines.
+	serveErr := make(chan error, 2)
+
+	// Serve TCP in background.
 	go func() {
-		if err := s.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := s.httpServer.Serve(tcpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
-		close(serveErr)
 	}()
+
+	// Serve Unix socket in background (if available).
+	if unixListener != nil {
+		go func() {
+			if err := s.httpServer.Serve(unixListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serveErr <- err
+			}
+		}()
+	}
 
 	// Wait for shutdown signal or serve error.
 	select {
@@ -150,10 +191,28 @@ func (s *Server) Start() error {
 		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
 			s.logger.Error("graceful shutdown failed", "error", err)
 		}
-		return <-serveErr
+		return nil
 	case err := <-serveErr:
 		return err
 	}
+}
+
+// listenUnix creates a Unix domain socket listener at path.
+// Removes any stale socket file first (leftover from unclean shutdown).
+// Sets socket permissions to 0600.
+func listenUnix(path string) (net.Listener, error) {
+	// Remove stale socket file if it exists.
+	_ = os.Remove(path)
+	l, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, fmt.Errorf("listen unix %s: %w", path, err)
+	}
+	// Restrict socket to owner only.
+	if err := os.Chmod(path, 0600); err != nil {
+		l.Close()
+		return nil, fmt.Errorf("chmod unix socket: %w", err)
+	}
+	return l, nil
 }
 
 // writePIDFile creates (or reuses) the PID file and acquires an exclusive

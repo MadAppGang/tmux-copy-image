@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -380,6 +381,90 @@ func (c *tunnelCheck) Run(ctx context.Context) Result {
 	return Result{
 		Status:      StatusPass,
 		Description: fmt.Sprintf("SSH tunnel: /health reachable from %s (tunnel active)", c.Host),
+	}
+}
+
+// unixSocketCheck verifies that the daemon's Unix socket exists and is reachable.
+type unixSocketCheck struct {
+	SocketPath string
+}
+
+func (c *unixSocketCheck) Name() string { return "rpaster unix socket" }
+
+func (c *unixSocketCheck) Run(ctx context.Context) Result {
+	if _, err := os.Stat(c.SocketPath); err != nil {
+		return Result{
+			Status:      StatusWarn,
+			Description: fmt.Sprintf("unix socket not found at %s (daemon not running or socket disabled)", c.SocketPath),
+			Remediation: "Run: rpaster serve  (or ensure --unix-socket is not set to empty)",
+		}
+	}
+
+	// Probe /health over the Unix socket.
+	transport := &http.Transport{
+		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(dialCtx, "unix", c.SocketPath)
+		},
+	}
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost/health", nil)
+	if err != nil {
+		return Result{
+			Status:      StatusFail,
+			Description: fmt.Sprintf("unix socket: failed to construct health request: %v", err),
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Result{
+			Status:      StatusFail,
+			Description: fmt.Sprintf("unix socket at %s exists but daemon not responding: %v", c.SocketPath, err),
+			Remediation: "Restart the daemon: rpaster serve",
+		}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return Result{
+			Status:      StatusWarn,
+			Description: fmt.Sprintf("unix socket health check returned HTTP %d", resp.StatusCode),
+		}
+	}
+	return Result{
+		Status:      StatusPass,
+		Description: fmt.Sprintf("rpaster unix socket healthy at %s", c.SocketPath),
+	}
+}
+
+// unixTunnelCheck verifies that a forwarded Unix socket is reachable on the remote host.
+type unixTunnelCheck struct {
+	Host       string
+	SocketPath string // remote socket path to probe
+}
+
+func (c *unixTunnelCheck) Name() string { return "SSH unix socket tunnel" }
+
+func (c *unixTunnelCheck) Run(ctx context.Context) Result {
+	cmd := fmt.Sprintf(
+		"curl -s --max-time 5 --unix-socket %s http://localhost/health",
+		shellQuote(c.SocketPath),
+	)
+	out, err := runSSH(ctx, c.Host, cmd)
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		return Result{
+			Status:      StatusFail,
+			Description: fmt.Sprintf("SSH unix tunnel: cannot reach rpaster via %s on %s", c.SocketPath, c.Host),
+			Remediation: fmt.Sprintf("Ensure SSH StreamLocalForward is configured for host %s and rpaster is running locally.", c.Host),
+		}
+	}
+	if !strings.Contains(string(out), `"status"`) {
+		return Result{
+			Status:      StatusWarn,
+			Description: fmt.Sprintf("SSH unix tunnel: reached %s but /health response unexpected", c.Host),
+		}
+	}
+	return Result{
+		Status:      StatusPass,
+		Description: fmt.Sprintf("SSH unix tunnel: /health reachable via %s on %s", c.SocketPath, c.Host),
 	}
 }
 

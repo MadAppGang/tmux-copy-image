@@ -288,18 +288,29 @@ const (
 // tmuxBlock generates a managed block for ~/.tmux.conf.
 // When TPM is present, it emits `set -g @plugin 'org/repo'` (native TPM).
 // Otherwise, it emits a `run-shell` directive that works without TPM.
+// In both cases, session hooks for find-socket.sh are added to discover the
+// rpaster Unix socket on session creation and client attach.
 func tmuxBlock(pluginDir string, useTPM bool) string {
+	findSocket := shellQuote("run-shell " + expandRemoteTilde(pluginDir) + "/scripts/find-socket.sh")
+	hooks := fmt.Sprintf(
+		"set-hook -g session-created %s\nset-hook -g client-attached %s",
+		findSocket,
+		findSocket,
+	)
+
 	if useTPM {
-		return fmt.Sprintf("%s\nset -g @plugin '%s'\n%s\n",
+		return fmt.Sprintf("%s\nset -g @plugin '%s'\n%s\n%s\n",
 			tmuxConfBeginFmt,
 			tpmPluginRepo,
+			hooks,
 			tmuxConfEnd,
 		)
 	}
 	entryPoint := expandRemoteTilde(pluginDir) + "/tmux-clip-image.tmux"
-	return fmt.Sprintf("%s\nrun-shell %s\n%s\n",
+	return fmt.Sprintf("%s\nrun-shell %s\n%s\n%s\n",
 		tmuxConfBeginFmt,
 		shellQuote(entryPoint),
+		hooks,
 		tmuxConfEnd,
 	)
 }

@@ -51,6 +51,7 @@ type Check interface {
 // Config holds parameters for the doctor run.
 type Config struct {
 	Port       int
+	UnixSocket string // local Unix socket path to probe; empty = skip unix socket check
 	RemoteHost string // empty = local-only
 	PluginDir  string // remote plugin directory to verify
 	JSONOutput bool
@@ -177,12 +178,17 @@ func outputJSON(w io.Writer, results []namedResult) error {
 }
 
 func localChecks(cfg Config) []Check {
-	return []Check{
+	checks := []Check{
 		&binaryCheck{},
 		&backendCheck{},
 		&daemonCheck{Port: cfg.Port},
 		&serviceCheck{},
 	}
+	// Add unix socket check when a socket path is configured.
+	if cfg.UnixSocket != "" {
+		checks = append(checks, &unixSocketCheck{SocketPath: cfg.UnixSocket})
+	}
+	return checks
 }
 
 func remoteChecks(cfg Config) []Check {
@@ -190,10 +196,21 @@ func remoteChecks(cfg Config) []Check {
 	if pluginDir == "" {
 		pluginDir = "~/.tmux/plugins/tmux-clip-image"
 	}
-	return []Check{
+	checks := []Check{
 		&sshConnectCheck{Host: cfg.RemoteHost},
 		&remoteCurlCheck{Host: cfg.RemoteHost},
 		&remotePluginCheck{Host: cfg.RemoteHost, PluginDir: pluginDir},
 		&tunnelCheck{Host: cfg.RemoteHost, Port: cfg.Port},
 	}
+	// Add unix tunnel check when a remote socket path is configured.
+	if cfg.UnixSocket != "" {
+		// Derive the remote socket path: hostname-keyed static path used by the installer.
+		// In a real session the path would be SSH_CONNECTION-hashed, but for doctor
+		// we probe the static hostname-keyed path that the installer writes.
+		checks = append(checks, &unixTunnelCheck{
+			Host:       cfg.RemoteHost,
+			SocketPath: cfg.UnixSocket,
+		})
+	}
+	return checks
 }

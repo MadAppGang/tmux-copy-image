@@ -165,11 +165,12 @@ func newSetupCmd() *cobra.Command {
 
 func newServeCmd() *cobra.Command {
 	var (
-		port      int
-		token     string
-		logFormat string
-		logLevel  string
-		pidFile   string
+		port       int
+		token      string
+		logFormat  string
+		logLevel   string
+		pidFile    string
+		unixSocket string
 	)
 
 	cmd := &cobra.Command{
@@ -178,7 +179,8 @@ func newServeCmd() *cobra.Command {
 		Long: `Start the rpaster HTTP daemon on 127.0.0.1:<port>.
 
 The daemon reads the system clipboard and serves its content over HTTP.
-Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
+Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.
+A Unix domain socket is also created at --unix-socket for StreamLocalForward tunnels.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Expand ~ in pid file path.
 			if pidFile == "" {
@@ -206,13 +208,14 @@ Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
 			}
 
 			srv := daemon.New(daemon.Config{
-				Port:      port,
-				Token:     token,
-				LogFormat: logFormat,
-				LogLevel:  logLevel,
-				PIDFile:   pidFile,
-				Version:   version,
-				Backend:   backend,
+				Port:       port,
+				UnixSocket: unixSocket,
+				Token:      token,
+				LogFormat:  logFormat,
+				LogLevel:   logLevel,
+				PIDFile:    pidFile,
+				Version:    version,
+				Backend:    backend,
 			})
 
 			return srv.Start()
@@ -220,6 +223,7 @@ Connect a tmux plugin on a remote machine via SSH RemoteForward to use it.`,
 	}
 
 	cmd.Flags().IntVar(&port, "port", 18339, "Port to listen on (always binds to 127.0.0.1)")
+	cmd.Flags().StringVar(&unixSocket, "unix-socket", daemon.DefaultUnixSocket(), "Unix domain socket path (empty to disable)")
 	cmd.Flags().StringVar(&token, "token", "", "Bearer token for authentication (empty = disabled). Prefer CLIP_SERVE_TOKEN env var.")
 	cmd.Flags().StringVar(&logFormat, "log-format", "text", `Log format: "text" or "json"`)
 	cmd.Flags().StringVar(&logLevel, "log-level", "info", `Log level: "debug", "info", "warn", "error"`)
@@ -233,6 +237,7 @@ func newDoctorCmd() *cobra.Command {
 		remoteHost string
 		jsonOutput bool
 		port       int
+		unixSocket string
 	)
 
 	cmd := &cobra.Command{
@@ -241,10 +246,12 @@ func newDoctorCmd() *cobra.Command {
 		Long: `Run end-to-end diagnostic checks for the rpaster installation.
 
 Checks include: binary availability, clipboard backend, daemon health,
-and service unit presence. Use --remote to also check the remote side.`,
+and service unit presence. Use --remote to also check the remote side.
+Use --socket to also probe the Unix domain socket.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := doctor.Config{
 				Port:       port,
+				UnixSocket: unixSocket,
 				RemoteHost: remoteHost,
 				JSONOutput: jsonOutput,
 				Out:        os.Stdout,
@@ -266,6 +273,7 @@ and service unit presence. Use --remote to also check the remote side.`,
 	cmd.Flags().StringVar(&remoteHost, "remote", "", "SSH host to also check remote side")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Emit check results as JSON")
 	cmd.Flags().IntVar(&port, "port", 18339, "Port the daemon is listening on")
+	cmd.Flags().StringVar(&unixSocket, "socket", daemon.DefaultUnixSocket(), "Unix domain socket path to probe (empty to skip)")
 
 	return cmd
 }
@@ -326,7 +334,9 @@ Remote installation (requires --remote):
 						return fmt.Errorf("home dir: %w", err)
 					}
 					sshConfigPath := filepath.Join(home, ".ssh", "config")
-					if err := installer.InjectRemoteForward(remoteHost, port, sshConfigPath); err != nil {
+					remoteSocket := installer.HostnameSocketPath(remoteHost)
+					localSocket := daemon.DefaultUnixSocket()
+					if err := installer.InjectStreamLocalForward(remoteHost, port, remoteSocket, localSocket, sshConfigPath); err != nil {
 						return err
 					}
 				}
