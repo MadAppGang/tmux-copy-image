@@ -432,6 +432,7 @@ func runRemoteCommand(host, command string) ([]byte, error) {
 	cmd := exec.Command("ssh",
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=30",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "RemoteCommand=none",
 		host,
 		command,

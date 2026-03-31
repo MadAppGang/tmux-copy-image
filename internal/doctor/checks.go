@@ -474,6 +474,7 @@ func runSSH(ctx context.Context, host, command string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "ssh",
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=10",
+		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "RemoteCommand=none",
 		host,
 		command,
