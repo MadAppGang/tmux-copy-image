@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/clipboard"
+	"github.com/MadAppGang/tmux-copy-image/internal/clipboard"
 )
 
 // ---------------------------------------------------------------------------

@@ -13,8 +13,10 @@ clip_option() {
     printf '%s' "${val:-$default_val}"
 }
 
-# rpaster_resolve_endpoint
-# Resolves the rpaster endpoint, preferring a Unix socket when available.
+# rpaster_resolve_endpoint [SESSION_ID]
+# Resolves the rpaster endpoint, preferring a Unix socket when available. The
+# socket is read from SESSION_ID's environment (find-socket.sh writes it there);
+# without an id, from the current session.
 #
 # Sets (and exports) two variables after calling this function:
 #   RPASTER_BASE             — base URL (e.g. "http://localhost" or "http://127.0.0.1:18339")
@@ -25,7 +27,11 @@ clip_option() {
 #   curl --silent "${RPASTER_CURL_SOCK_ARGS[@]}" "${RPASTER_BASE}/health"
 rpaster_resolve_endpoint() {
     local sock
-    sock="$(tmux show-environment RPASTER_SOCKET 2>/dev/null | cut -d= -f2-)"
+    if [ -n "${1:-}" ]; then
+        sock="$(tmux show-environment -t "$1" RPASTER_SOCKET 2>/dev/null | cut -d= -f2-)"
+    else
+        sock="$(tmux show-environment RPASTER_SOCKET 2>/dev/null | cut -d= -f2-)"
+    fi
     if [ -n "${sock}" ] && [ -S "${sock}" ]; then
         RPASTER_BASE="http://localhost"
         RPASTER_CURL_SOCK_ARGS=(--unix-socket "${sock}")

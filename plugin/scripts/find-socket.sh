@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# find-socket.sh — discover the rpaster socket for this tmux session
-# and store it in the tmux session environment variable RPASTER_SOCKET.
+# find-socket.sh SESSION_ID — discover the rpaster socket for one tmux session
+# and store it in THAT session's environment as RPASTER_SOCKET.
 #
-# Run via tmux session-created and client-attached hooks:
-#   set-hook -g session-created  "run-shell ~/.tmux/plugins/tmux-clip-image/scripts/find-socket.sh"
-#   set-hook -g client-attached  "run-shell ~/.tmux/plugins/tmux-clip-image/scripts/find-socket.sh"
+# Run by the session-created and client-attached hooks that
+# plugin/tmux-clip-image.tmux registers, which pass '#{session_id}'. The target
+# is explicit on every call: a hook job has no current session, and the socket
+# is per SSH connection, so one global value would be overwritten by whichever
+# client attached last. paste.sh reads it back with the same -t.
 
 set -uo pipefail
+
+session="${1:-}"
+[ -n "${session}" ] || exit 0
 
 # find_ssh_connection PID
 # Walks the process tree from PID looking for SSH_CONNECTION in the environment.
@@ -26,7 +31,7 @@ find_ssh_connection() {
     fi
 
     # Try the tmux session environment (works if pane's shell is the SSH login shell).
-    conn="$(tmux show-environment SSH_CONNECTION 2>/dev/null \
+    conn="$(tmux show-environment -t "${session}" SSH_CONNECTION 2>/dev/null \
         | grep '^SSH_CONNECTION=' | cut -d= -f2-)"
     if [ -n "${conn}" ]; then
         printf '%s' "${conn}"
@@ -75,14 +80,14 @@ probe_socket() {
 # --- Main ---
 
 # Get the PID of the current pane's shell.
-pane_pid="$(tmux display-message -p '#{pane_pid}' 2>/dev/null)"
+pane_pid="$(tmux display-message -t "${session}" -p '#{pane_pid}' 2>/dev/null)"
 
 # Priority 1: Session-unique socket derived from SSH_CONNECTION.
 ssh_conn="$(find_ssh_connection "${pane_pid:-0}")" || ssh_conn=""
 if [ -n "${ssh_conn}" ]; then
     candidate="$(socket_from_conn "${ssh_conn}")"
     if probe_socket "${candidate}"; then
-        tmux set-environment RPASTER_SOCKET "${candidate}"
+        tmux set-environment -t "${session}" RPASTER_SOCKET "${candidate}"
         exit 0
     fi
 fi
@@ -91,13 +96,13 @@ fi
 # The installer writes: StreamLocalForward /tmp/rpaster-<hostname>.sock /tmp/rpaster.sock
 hostname_sock="/tmp/rpaster-$(hostname -s 2>/dev/null | tr -dc 'a-zA-Z0-9-').sock"
 if probe_socket "${hostname_sock}"; then
-    tmux set-environment RPASTER_SOCKET "${hostname_sock}"
+    tmux set-environment -t "${session}" RPASTER_SOCKET "${hostname_sock}"
     exit 0
 fi
 
 # Priority 3: Local daemon socket at the well-known default path.
 if probe_socket "/tmp/rpaster.sock"; then
-    tmux set-environment RPASTER_SOCKET "/tmp/rpaster.sock"
+    tmux set-environment -t "${session}" RPASTER_SOCKET "/tmp/rpaster.sock"
     exit 0
 fi
 
@@ -106,10 +111,10 @@ port="$(tmux show-option -gqv "@clip-image-port" 2>/dev/null)"
 port="${port:-18339}"
 if curl --silent --max-time 1 "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
     # TCP is available — unset RPASTER_SOCKET so paste.sh uses TCP path.
-    tmux set-environment -u RPASTER_SOCKET 2>/dev/null || true
+    tmux set-environment -t "${session}" -u RPASTER_SOCKET 2>/dev/null || true
     exit 0
 fi
 
 # Nothing found — unset so paste.sh falls through to its own error handling.
-tmux set-environment -u RPASTER_SOCKET 2>/dev/null || true
+tmux set-environment -t "${session}" -u RPASTER_SOCKET 2>/dev/null || true
 exit 0

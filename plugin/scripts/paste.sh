@@ -31,7 +31,8 @@ msg_duration="$(clip_option "msg-duration" "3000")"
 claude_detect="$(clip_option "claude-detect" "auto")"
 
 # Resolve the rpaster endpoint: sets RPASTER_BASE and RPASTER_CURL_SOCK_ARGS.
-rpaster_resolve_endpoint
+# $1 is the session id the key binding passes (plugin/tmux-clip-image.tmux).
+rpaster_resolve_endpoint "${1:-}"
 
 # Default save directory to $TMPDIR or /tmp.
 if [ -z "${save_dir}" ]; then

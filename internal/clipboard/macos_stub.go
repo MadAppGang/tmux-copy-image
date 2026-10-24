@@ -11,6 +11,8 @@ type macOSBackend struct {
 	osascriptPath string
 }
 
-func (b *macOSBackend) Name() string                                    { return "none" }
-func (b *macOSBackend) Available() bool                                 { return false }
-func (b *macOSBackend) Read(_ context.Context, _ int64) ([]byte, error) { return nil, ErrBackendUnavailable }
+func (b *macOSBackend) Name() string    { return "none" }
+func (b *macOSBackend) Available() bool { return false }
+func (b *macOSBackend) Read(_ context.Context, _ int64) ([]byte, error) {
+	return nil, ErrBackendUnavailable
+}

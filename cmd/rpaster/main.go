@@ -11,11 +11,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/clipboard"
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/daemon"
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/doctor"
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/embedded"
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/installer"
+	"github.com/MadAppGang/tmux-copy-image/internal/clipboard"
+	"github.com/MadAppGang/tmux-copy-image/internal/daemon"
+	"github.com/MadAppGang/tmux-copy-image/internal/doctor"
+	"github.com/MadAppGang/tmux-copy-image/internal/embedded"
+	"github.com/MadAppGang/tmux-copy-image/internal/installer"
 )
 
 // Build-time variables injected via ldflags:

@@ -1,4 +1,4 @@
-module github.com/jacksteamdev/tmux-image-clipboard
+module github.com/MadAppGang/tmux-copy-image
 
 go 1.22
 

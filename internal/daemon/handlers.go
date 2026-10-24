@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/clipboard"
-	"github.com/jacksteamdev/tmux-image-clipboard/internal/imageutil"
+	"github.com/MadAppGang/tmux-copy-image/internal/clipboard"
+	"github.com/MadAppGang/tmux-copy-image/internal/imageutil"
 )
 
 const (
