@@ -20,8 +20,9 @@ bind_key="${bind_key:-V}"
 # session, and a call without -t has no current session inside a hook job.
 # (The plugin directory is single-quoted too, so it may not contain a `'`.)
 
-# Register the keybinding: prefix + <key> runs paste.sh.
-tmux bind-key "${bind_key}" run-shell -b "'${SCRIPTS_DIR}/paste.sh' '#{session_id}' >/dev/null 2>&1 || true"
+# Register the keybinding: prefix + <key> runs paste.sh. The pane id goes in as
+# $2 because a run-shell job has no TMUX_PANE (an id is `%N`, safe to quote).
+tmux bind-key "${bind_key}" run-shell -b "'${SCRIPTS_DIR}/paste.sh' '#{session_id}' '#{pane_id}' >/dev/null 2>&1 || true"
 
 # Discover the rpaster Unix socket on each new session and on each client
 # attach; this sets RPASTER_SOCKET in the session's environment so paste.sh can

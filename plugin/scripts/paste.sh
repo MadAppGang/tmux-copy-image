@@ -34,6 +34,23 @@ claude_detect="$(clip_option "claude-detect" "auto")"
 # $1 is the session id the key binding passes (plugin/tmux-clip-image.tmux).
 rpaster_resolve_endpoint "${1:-}"
 
+# The pane to paste into. The binding passes '#{pane_id}' as $2: a run-shell
+# job never has TMUX_PANE (tmux sets it only for a pane's own processes), so
+# under `set -u` a bare "${TMUX_PANE}" aborted the script before send-keys and
+# the binding's `>/dev/null 2>&1 || true` hid it (moox G3-H5). A binding that
+# passes only the session gets that session's active pane, asked of tmux.
+pane_id="${2:-${TMUX_PANE:-}}"
+if [ -z "${pane_id}" ] && [ -n "${1:-}" ]; then
+    pane_id="$(tmux display-message -p -t "$1" '#{pane_id}' 2>/dev/null || true)"
+fi
+case "${pane_id}" in
+    %[0-9]*) ;;
+    *)
+        clip_display_error "no target pane" "${msg_duration}"
+        exit 1
+        ;;
+esac
+
 # Default save directory to $TMPDIR or /tmp.
 if [ -z "${save_dir}" ]; then
     save_dir="${TMPDIR:-/tmp}"
@@ -66,7 +83,7 @@ find "${save_dir}" -maxdepth 1 -name "clip-*" -mmin +360 -delete 2>/dev/null || 
 # ---------------------------------------------------------------------------
 if ! curl --silent --max-time "${health_timeout}" --max-redirs 0 \
         --output /dev/null \
-        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        ${RPASTER_CURL_SOCK_ARGS[@]+"${RPASTER_CURL_SOCK_ARGS[@]}"} \
         "${RPASTER_BASE}/health" 2>/dev/null; then
     clip_display_error "cannot reach rpaster (run: rpaster doctor)" "${msg_duration}"
     exit 1
@@ -80,11 +97,11 @@ meta_raw=""
 if [ -f "${token_file}" ] && [ -r "${token_file}" ]; then
     meta_raw="$(curl --silent --max-time "${meta_timeout}" --max-redirs 0 \
         --config <(printf 'header = "Authorization: Bearer %s"' "$(cat "${token_file}")") \
-        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        ${RPASTER_CURL_SOCK_ARGS[@]+"${RPASTER_CURL_SOCK_ARGS[@]}"} \
         "${RPASTER_BASE}/image/meta?format=shell" 2>/dev/null)" || true
 else
     meta_raw="$(curl --silent --max-time "${meta_timeout}" --max-redirs 0 \
-        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        ${RPASTER_CURL_SOCK_ARGS[@]+"${RPASTER_CURL_SOCK_ARGS[@]}"} \
         "${RPASTER_BASE}/image/meta?format=shell" 2>/dev/null)" || true
 fi
 
@@ -93,9 +110,23 @@ if [ -z "${meta_raw}" ]; then
     exit 1
 fi
 
-# Evaluate shell-format KEY=VALUE lines into shell variables.
-# Values are guaranteed to be enum strings and integers (no metacharacters).
-eval "${meta_raw}"
+# Parse the shell-format KEY=VALUE lines. Never eval them: the reply comes from
+# whatever answers on the socket or on 127.0.0.1:<port> (an error body, or a
+# local process squatting the port), so it is data. Only the two keys this
+# script uses are taken, each only in its own shape (WIDTH, HEIGHT and
+# SIZE_BYTES are not used); every other line is ignored (G3-H5).
+AVAILABLE="" FORMAT=""
+while IFS='=' read -r meta_key meta_val || [ -n "${meta_key:-}" ]; do
+    meta_val="${meta_val%$'\r'}"
+    case "${meta_key}" in
+        AVAILABLE)
+            case "${meta_val}" in true | false) AVAILABLE="${meta_val}" ;; esac ;;
+        FORMAT)
+            case "${meta_val}" in '' | *[!a-z0-9]*) ;; *) FORMAT="${meta_val}" ;; esac ;;
+    esac
+done <<EOF
+${meta_raw}
+EOF
 
 # AVAILABLE, FORMAT, WIDTH, HEIGHT, SIZE_BYTES are now set (or unset).
 # FR-P-19: no image found in clipboard
@@ -134,13 +165,13 @@ curl_exit=0
 if [ -f "${token_file}" ] && [ -r "${token_file}" ]; then
     http_status="$(curl --silent --max-time "${download_timeout}" --max-redirs 0 \
         --config <(printf 'header = "Authorization: Bearer %s"' "$(cat "${token_file}")") \
-        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        ${RPASTER_CURL_SOCK_ARGS[@]+"${RPASTER_CURL_SOCK_ARGS[@]}"} \
         --output "${save_path}" \
         --write-out "%{http_code}" \
         "${RPASTER_BASE}/image" 2>/dev/null)" || curl_exit=$?
 else
     http_status="$(curl --silent --max-time "${download_timeout}" --max-redirs 0 \
-        "${RPASTER_CURL_SOCK_ARGS[@]}" \
+        ${RPASTER_CURL_SOCK_ARGS[@]+"${RPASTER_CURL_SOCK_ARGS[@]}"} \
         --output "${save_path}" \
         --write-out "%{http_code}" \
         "${RPASTER_BASE}/image" 2>/dev/null)" || curl_exit=$?
@@ -190,17 +221,18 @@ chmod 600 "${save_path}" 2>/dev/null || true
 # Step 7: Detect whether the active pane is running Claude Code.
 # FR-P-13 through FR-P-18: Claude Code detection and mode control.
 # ---------------------------------------------------------------------------
-if detect_claude_code "${TMUX_PANE}" "${claude_detect}"; then
-    clip_log_debug "Claude Code detected in pane ${TMUX_PANE}"
+if detect_claude_code "${pane_id}" "${claude_detect}"; then
+    clip_log_debug "Claude Code detected in pane ${pane_id}"
 else
-    clip_log_debug "Claude Code not detected in pane ${TMUX_PANE} (mode: ${claude_detect})"
+    clip_log_debug "Claude Code not detected in pane ${pane_id} (mode: ${claude_detect})"
 fi
 # Currently both paths insert the path identically (future: may differ).
 
 # ---------------------------------------------------------------------------
-# Step 8: Insert the file path into the active tmux pane (no Enter).
+# Step 8: Insert the file path into the target pane (no Enter). -l: the path
+# is literal text, never read as a key name ("Enter", "C-c").
 # ---------------------------------------------------------------------------
-tmux send-keys -t "${TMUX_PANE}" "${save_path}"
+tmux send-keys -l -t "${pane_id}" -- "${save_path}"
 
 # ---------------------------------------------------------------------------
 # Step 9: Show success notification.
